@@ -91,18 +91,18 @@ const char *GetVersionString();
 #define SAVEVER 4558
 
 // This is so that derivates can use the same savegame versions without worrying about engine compatibility
-#define GAMESIG "GZDOOM"
-#define BASEWAD "gzdoom.pk3"
+#define GAMESIG "SUPPLICE"
+#define BASEWAD "supplice.pk3"
 #define OPTIONALWAD "game_support.pk3"
 #define GZDOOM 1
 #define VR3D_ENABLED
 
 // More stuff that needs to be different for derivatives.
-#define GAMENAME "GZDoom"
-#define WGAMENAME L"GZDoom"
-#define GAMENAMELOWERCASE "gzdoom"
-#define FORUM_URL "http://forum.zdoom.org/"
-#define BUGS_FORUM_URL	"http://forum.zdoom.org/viewforum.php?f=2"
+#define GAMENAME "Supplice"
+#define WGAMENAME L"Supplice"
+#define GAMENAMELOWERCASE "supplice"
+#define FORUM_URL "https://store.steampowered.com/app/1693280/Supplice/"
+#define BUGS_FORUM_URL	"https://steamcommunity.com/app/1693280/discussions/"
 
 #if defined(__APPLE__) || defined(_WIN32)
 #define GAME_DIR GAMENAME
