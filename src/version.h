@@ -91,20 +91,20 @@ const char *GetVersionString();
 #define SAVEVER 4560
 
 // This is so that derivates can use the same savegame versions without worrying about engine compatibility
-#define GAMESIG "GZDOOM"
-#define BASEWAD "gzdoom.pk3"
+#define GAMESIG "SUPPLICE"
+#define BASEWAD "supplice.pk3"
 // Set OPTIONALWAD to "" (null) to disable searching for it
 #define OPTIONALWAD "game_support.pk3"
 #define GZDOOM 1
 #define VR3D_ENABLED
 
 // More stuff that needs to be different for derivatives.
-#define GAMENAME "GZDoom"
-#define WGAMENAME L"GZDoom"
+#define GAMENAME "Supplice"
+#define WGAMENAME L"Supplice"
 #define GAMENAMELOWERCASE "gzdoom"
-#define QUERYIWADDEFAULT true
-#define FORUM_URL "http://forum.zdoom.org/"
-#define BUGS_FORUM_URL	"http://forum.zdoom.org/viewforum.php?f=2"
+#define QUERYIWADDEFAULT false
+#define FORUM_URL "https://steamcommunity.com/app/1693280/discussions/"
+#define BUGS_FORUM_URL	"https://steamcommunity.com/app/1693280/discussions/"
 // For QUERYIWADDEFAULT: Set to 'true' to always show dialog box on startup by default, 'false' to disable.
 // Should set to 'false' for standalone games, and set to 'true' for regular source port forks that are meant to run any game.
 
