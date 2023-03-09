@@ -7,9 +7,11 @@
 #include "textures.h"
 #include "renderstyle.h"
 #include "dobject.h"
+#include "refcounted.h"
 
 struct DrawParms;
 struct FColormap;
+struct IntRect;
 
 class DShape2DTransform : public DObject
 {
@@ -49,10 +51,22 @@ struct F2DPolygons
 };
 
 class DShape2D;
+struct DShape2DBufferInfo;
+
+enum class SpecialDrawCommand {
+	NotSpecial,
+
+	EnableStencil,
+	SetStencil,
+	ClearStencil,
+};
 
 class F2DDrawer
 {
 public:
+	F2DDrawer() {
+		this->transform.Identity();
+	}
 
 	enum EDrawType : uint8_t
 	{
@@ -99,9 +113,17 @@ public:
 		}
 
 	};
-	
+
 	struct RenderCommand
 	{
+		SpecialDrawCommand isSpecial;
+
+		bool stencilOn;
+
+		int stencilOffs;
+		int stencilOp;
+		int stencilFlags;
+
 		EDrawType mType;
 		int mVertIndex;
 		int mVertCount;
@@ -123,20 +145,24 @@ public:
 		bool useTransform;
 		DMatrix3x3 transform;
 
-		DShape2D* shape2D;
+		RefCountedPtr<DShape2DBufferInfo> shape2DBufInfo;
 		int shape2DBufIndex;
 		int shape2DIndexCount;
 		int shape2DCommandCounter;
 
 		RenderCommand()
 		{
-			memset(this, 0, sizeof(*this));
+			memset((void*)this, 0,  sizeof(*this));
 		}
 
 		// If these fields match, two draw commands can be batched.
 		bool isCompatible(const RenderCommand &other) const
 		{
-			if (shape2D != nullptr || other.shape2D != nullptr) return false;
+			if (
+				isSpecial != SpecialDrawCommand::NotSpecial ||
+				other.isSpecial != SpecialDrawCommand::NotSpecial
+			) return false;
+			if (shape2DBufInfo != nullptr || other.shape2DBufInfo != nullptr) return false;
 			return mTexture == other.mTexture &&
 				mType == other.mType &&
 				mTranslationId == other.mTranslationId &&
@@ -170,10 +196,11 @@ public:
 	bool locked;	// prevents clearing of the data so it can be reused multiple times (useful for screen fades)
 	float screenFade = 1.f;
 	DVector2 offset;
+	DMatrix3x3 transform;
 public:
 	int fullscreenautoaspect = 3;
 	int cliptop = -1, clipleft = -1, clipwidth = -1, clipheight = -1;
-	
+
 	int AddCommand(RenderCommand *data);
 	void AddIndices(int firstvert, int count, ...);
 private:
@@ -189,7 +216,7 @@ public:
 	void AddPoly(FGameTexture *texture, FVector2 *points, int npoints,
 		double originx, double originy, double scalex, double scaley,
 		DAngle rotation, const FColormap &colormap, PalEntry flatcolor, double lightlevel, uint32_t *indices, size_t indexcount);
-	void AddPoly(FGameTexture* img, FVector4 *vt, size_t vtcount, const unsigned int *ind, size_t idxcount, int translation, PalEntry color, FRenderStyle style, int clipx1, int clipy1, int clipx2, int clipy2);
+	void AddPoly(FGameTexture* img, FVector4 *vt, size_t vtcount, const unsigned int *ind, size_t idxcount, int translation, PalEntry color, FRenderStyle style, const IntRect* clip);
 	void FillPolygon(int* rx1, int* ry1, int* xb1, int32_t npoints, int picnum, int palette, int shade, int props, const FVector2& xtex, const FVector2& ytex, const FVector2& otex,
 		int clipx1, int clipy1, int clipx2, int clipy2);
 	void AddFlatFill(int left, int top, int right, int bottom, FGameTexture *src, int local_origin = false, double flatscale = 1.0, PalEntry color = 0xffffffff, ERenderStyle rs = STYLE_Normal);
@@ -198,11 +225,15 @@ public:
 	void ClearScreen(PalEntry color = 0xff000000);
 	void AddDim(PalEntry color, float damount, int x1, int y1, int w, int h);
 	void AddClear(int left, int top, int right, int bottom, int palcolor, uint32_t color);
-	
-		
-	void AddLine(double x1, double y1, double x2, double y2, int cx, int cy, int cx2, int cy2, uint32_t color, uint8_t alpha = 255);
-	void AddThickLine(int x1, int y1, int x2, int y2, double thickness, uint32_t color, uint8_t alpha = 255);
+
+
+	void AddLine(const DVector2& v1, const DVector2& v2, const IntRect* clip, uint32_t color, uint8_t alpha = 255);
+	void AddThickLine(const DVector2& v1, const DVector2& v2, double thickness, uint32_t color, uint8_t alpha = 255);
 	void AddPixel(int x1, int y1, uint32_t color);
+
+	void AddEnableStencil(bool on);
+	void AddSetStencil(int offs, int op, int flags);
+	void AddClearStencil();
 
 	void Clear();
 	void Lock() { locked = true; }
@@ -214,6 +245,7 @@ public:
 	void Begin(int w, int h) { isIn2D = true; Width = w; Height = h; }
 	void End() { isIn2D = false; }
 	bool HasBegun2D() { return isIn2D; }
+	void OnFrameDone();
 
 	void ClearClipRect() { clipleft = cliptop = 0; clipwidth = clipheight = -1; }
 	void SetClipRect(int x, int y, int w, int h);
@@ -226,11 +258,14 @@ public:
 		return v;
 	}
 
-	void Set(TwoDVertex* v, double xx, double yy, double zz, double uu, double vv, PalEntry col)
+	void SetTransform(const DShape2DTransform& transform)
 	{
-		v->Set(xx + offset.X, yy + offset.Y, zz, uu, vv, col);
+		this->transform = transform.transform;
 	}
-
+	void ClearTransform()
+	{
+		this->transform.Identity();
+	}
 
 	int DrawCount() const
 	{
@@ -240,12 +275,31 @@ public:
 	bool mIsFirstPass = true;
 };
 
+// DCanvas is already taken so using FCanvas instead.
+class FCanvas : public DObject
+{
+	DECLARE_CLASS(FCanvas, DObject)
+public:
+	F2DDrawer Drawer;
+	FCanvasTexture* Tex = nullptr;
+};
+
+struct DShape2DBufferInfo : RefCountedBase
+{
+	TArray<F2DVertexBuffer> buffers;
+	bool needsVertexUpload = true;
+	int bufIndex = -1;
+	int lastCommand = -1;
+	bool uploadedOnce = false;
+};
+
 class DShape2D : public DObject
 {
 
 	DECLARE_CLASS(DShape2D,DObject)
 public:
 	DShape2D()
+	: bufferInfo(new DShape2DBufferInfo)
 	{
 		transform.Identity();
 	}
@@ -261,12 +315,8 @@ public:
 
 	DMatrix3x3 transform;
 
-	TArray<F2DVertexBuffer> buffers;
-	bool needsVertexUpload = true;
-	int bufIndex = -1;
-	int lastCommand = -1;
+	RefCountedPtr<DShape2DBufferInfo> bufferInfo;
 
-	bool uploadedOnce = false;
 	DrawParms* lastParms;
 
 	void OnDestroy() override;
@@ -297,8 +347,8 @@ public:
 
 	void UploadData(F2DDrawer::TwoDVertex *vertices, int vertcount, int *indices, int indexcount)
 	{
-		mVertexBuffer->SetData(vertcount * sizeof(*vertices), vertices, false);
-		mIndexBuffer->SetData(indexcount * sizeof(unsigned int), indices, false);
+		mVertexBuffer->SetData(vertcount * sizeof(*vertices), vertices, BufferUsageType::Stream);
+		mIndexBuffer->SetData(indexcount * sizeof(unsigned int), indices, BufferUsageType::Stream);
 	}
 
 	std::pair<IVertexBuffer *, IIndexBuffer *> GetBufferObjects() const

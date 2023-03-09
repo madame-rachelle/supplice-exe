@@ -38,13 +38,10 @@ void I_PrintStr (const char *cp);
 void I_SetIWADInfo ();
 
 // Pick from multiple IWADs to use
-int I_PickIWad (WadStuff *wads, int numwads, bool queryiwad, int defaultiwad);
+int I_PickIWad(WadStuff* wads, int numwads, bool queryiwad, int defaultiwad, int& autoloadflags);
 
 // The ini could not be saved at exit
-bool I_WriteIniFailed ();
-
-// [RH] Used by the display code to set the normal window procedure
-void I_SetWndProc();
+bool I_WriteIniFailed (const char* filename);
 
 // [RH] Checks the registry for Steam's install path, so we can scan its
 // directories for IWADs if the user purchased any through Steam.
@@ -52,6 +49,9 @@ TArray<FString> I_GetSteamPath();
 
 // [GZ] Same deal for GOG paths
 TArray<FString> I_GetGogPaths();
+
+// Again for the Bethesda.net Launcher path
+TArray<FString> I_GetBethesdaPath();
 
 // Damn Microsoft for doing Get/SetWindowLongPtr half-assed. Instead of
 // giving them proper prototypes under Win32, they are just macros for
@@ -78,5 +78,9 @@ FString I_GetLongPathName(const FString &shortpath);
 int I_GetNumaNodeCount();
 int I_GetNumaNodeThreadCount(int numaNode);
 void I_SetThreadNumaNode(std::thread &thread, int numaNode);
+
+void I_OpenShellFolder(const char*);
+FString I_GetCWD();
+bool I_ChDir(const char* path);
 
 #endif

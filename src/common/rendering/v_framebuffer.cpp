@@ -170,6 +170,8 @@ void DFrameBuffer::SetViewportRects(IntRect *bounds)
 		mSceneViewport = *bounds;
 		mScreenViewport = *bounds;
 		mOutputLetterbox = *bounds;
+		mGameScreenWidth = mScreenViewport.width;
+		mGameScreenHeight = mScreenViewport.height;
 		return;
 	}
 
@@ -186,7 +188,7 @@ void DFrameBuffer::SetViewportRects(IntRect *bounds)
 	int screenWidth = GetWidth();
 	int screenHeight = GetHeight();
 	float scaleX, scaleY;
-	scaleX = std::min(clientWidth / (float)screenWidth, clientHeight / ((float)screenHeight * ViewportPixelAspect()));
+	scaleX = min(clientWidth / (float)screenWidth, clientHeight / ((float)screenHeight * ViewportPixelAspect()));
 	scaleY = scaleX * ViewportPixelAspect();
 	mOutputLetterbox.width = (int)round(screenWidth * scaleX);
 	mOutputLetterbox.height = (int)round(screenHeight * scaleY);
@@ -216,6 +218,9 @@ void DFrameBuffer::SetViewportRects(IntRect *bounds)
 		mSceneViewport.width = (int)round(mSceneViewport.width * scaleX);
 		mSceneViewport.height = (int)round(mSceneViewport.height * scaleY);
 	}
+
+	mGameScreenWidth = GetWidth();
+	mGameScreenHeight = GetHeight();
 }
 
 //===========================================================================
@@ -226,12 +231,12 @@ void DFrameBuffer::SetViewportRects(IntRect *bounds)
 
 int DFrameBuffer::ScreenToWindowX(int x)
 {
-	return mScreenViewport.left + (int)round(x * mScreenViewport.width / (float)GetWidth());
+	return mScreenViewport.left + (int)round(x * mScreenViewport.width / (float)mGameScreenWidth);
 }
 
 int DFrameBuffer::ScreenToWindowY(int y)
 {
-	return mScreenViewport.top + mScreenViewport.height - (int)round(y * mScreenViewport.height / (float)GetHeight());
+	return mScreenViewport.top + mScreenViewport.height - (int)round(y * mScreenViewport.height / (float)mGameScreenHeight);
 }
 
 void DFrameBuffer::ScaleCoordsFromWindow(int16_t &x, int16_t &y)
@@ -291,16 +296,19 @@ FMaterial* DFrameBuffer::CreateMaterial(FGameTexture* tex, int scaleflags)
 //
 //==========================================================================
 
-DEFINE_ACTION_FUNCTION(_Screen, GetWidth)
+static int ScreenGetWidth() { return twod->GetWidth(); }
+static int ScreenGetHeight() { return twod->GetHeight(); }
+
+DEFINE_ACTION_FUNCTION_NATIVE(_Screen, GetWidth, ScreenGetWidth)
 {
 	PARAM_PROLOGUE;
-	ACTION_RETURN_INT(screen->GetWidth());
+	ACTION_RETURN_INT(twod->GetWidth());
 }
 
-DEFINE_ACTION_FUNCTION(_Screen, GetHeight)
+DEFINE_ACTION_FUNCTION_NATIVE(_Screen, GetHeight, ScreenGetHeight)
 {
 	PARAM_PROLOGUE;
-	ACTION_RETURN_INT(screen->GetHeight());
+	ACTION_RETURN_INT(twod->GetHeight());
 }
 
 DEFINE_ACTION_FUNCTION(_Screen, PaletteColor)

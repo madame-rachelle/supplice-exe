@@ -38,6 +38,13 @@ typedef uint32_t			angle_t;
 #define FORCE_PACKED
 #endif
 
+// Todo: get rid of this. Static file name buffers suck.
+#ifndef PATH_MAX
+#define BMAX_PATH 256
+#else
+#define BMAX_PATH PATH_MAX
+#endif
+
 
 #ifdef __GNUC__
 #define GCCPRINTF(stri,firstargi)		__attribute__((format(printf,stri,firstargi)))
@@ -84,15 +91,26 @@ inline double DEG2RAD(double deg)
 	return deg * (M_PI / 180.0);
 }
 
-inline float RAD2DEG(float deg)
+inline float RAD2DEG(float rad)
 {
-	return deg * float(180. / M_PI);
+	return rad * float(180. / M_PI);
 }
 
-inline double RAD2DEG(double deg)
+inline double RAD2DEG(double rad)
 {
-	return deg * (180. / M_PI);
+	return rad * (180. / M_PI);
 }
+
+inline angle_t RAD2BAM(float rad)
+{
+	return angle_t(rad * float(0x80000000u / M_PI));
+}
+
+inline angle_t RAD2BAM(double rad)
+{
+	return angle_t(rad * (0x80000000u / M_PI));
+}
+
 
 // This is needed in common code, despite being Doom specific.
 enum EStateUseFlags
@@ -105,3 +123,4 @@ enum EStateUseFlags
 
 using std::min;
 using std::max;
+using std::clamp;

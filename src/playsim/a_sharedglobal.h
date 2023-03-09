@@ -12,7 +12,7 @@ class DBaseDecal;
 struct SpreadInfo;
 
 DBaseDecal *ShootDecal(FLevelLocals *Level, const FDecalTemplate *tpl, sector_t *sec, double x, double y, double z, DAngle angle, double tracedist, bool permanent);
-void SprayDecal(AActor *shooter, const char *name,double distance = 172., DVector3 offset = DVector3(0., 0., 0.), DVector3 direction = DVector3(0., 0., 0.) );
+void SprayDecal(AActor *shooter, const char *name,double distance = 172., DVector3 offset = DVector3(0., 0., 0.), DVector3 direction = DVector3(0., 0., 0.), bool useBloodColor = false, uint32_t decalColor = 0);
 
 class DBaseDecal : public DThinker
 {
@@ -69,8 +69,8 @@ public:
 	}
 	void Construct(side_t *wall, const FDecalTemplate *templ);
 
-	static DImpactDecal *StaticCreate(FLevelLocals *Level, const char *name, const DVector3 &pos, side_t *wall, F3DFloor * ffloor, PalEntry color = 0, uint32_t bloodTranslation = 0);
-	static DImpactDecal *StaticCreate(FLevelLocals *Level, const FDecalTemplate *tpl, const DVector3 &pos, side_t *wall, F3DFloor * ffloor, PalEntry color = 0, uint32_t bloodTranslation = 0);
+	static DBaseDecal *StaticCreate(FLevelLocals *Level, const char *name, const DVector3 &pos, side_t *wall, F3DFloor * ffloor, PalEntry color = 0, uint32_t bloodTranslation = 0);
+	static DBaseDecal *StaticCreate(FLevelLocals *Level, const FDecalTemplate *tpl, const DVector3 &pos, side_t *wall, F3DFloor * ffloor, PalEntry color = 0, uint32_t bloodTranslation = 0, bool permanent = false);
 
 	void BeginPlay ();
 	void Expired() override;
@@ -112,6 +112,10 @@ enum
 	QF_MAX =			1 << 3,
 	QF_FULLINTENSITY =	1 << 4,
 	QF_WAVE =			1 << 5,
+	QF_3D =				1 << 6,
+	QF_GROUNDONLY =		1 << 7,
+	QF_AFFECTACTORS =	1 << 8,
+	QF_SHAKEONLY =		1 << 9,
 };
 
 struct FQuakeJiggers
@@ -150,6 +154,7 @@ public:
 	double GetModIntensity(double intensity, bool fake = false) const;
 	double GetModWave(double ticFrac, double waveMultiplier) const;
 	double GetFalloff(double dist) const;
+	void DoQuakeDamage(DEarthquake *quake, AActor *victim) const;
 
 	static int StaticGetQuakeIntensities(double ticFrac, AActor *viewer, FQuakeJiggers &jiggers);
 };

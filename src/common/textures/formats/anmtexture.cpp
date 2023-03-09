@@ -66,7 +66,8 @@ FImageSource *AnmImage_TryCreate(FileReader & file, int lumpnum)
 {
 	file.Seek(0, FileReader::SeekSet);
 	char check[4];
-	file.Read(check, 4);
+	auto num = file.Read(check, 4);
+	if (num < 4) return nullptr;
 	if (memcmp(check, "LPF ", 4)) return nullptr;
 	file.Seek(0, FileReader::SeekSet);
 	auto buffer = file.ReadPadded(1);
@@ -81,7 +82,7 @@ FImageSource *AnmImage_TryCreate(FileReader & file, int lumpnum)
 	{
 		return new FAnmTexture(lumpnum, 320, 200);
 	}
-	
+
 	return nullptr;
 }
 
@@ -132,7 +133,7 @@ TArray<uint8_t> FAnmTexture::CreatePalettedPixels(int conversion)
 	uint8_t buffer[64000];
 	uint8_t palette[768];
 	uint8_t remap[256];
-	
+
 	ReadFrame(buffer, palette);
 	for(int i=0;i<256;i++)
 	{
@@ -153,7 +154,7 @@ int FAnmTexture::CopyPixels(FBitmap *bmp, int conversion)
 	uint8_t buffer[64000];
 	uint8_t palette[768];
 	ReadFrame(buffer, palette);
-	
+
     auto dpix = bmp->GetPixels();
 	for (int i = 0; i < Width * Height; i++)
 	{

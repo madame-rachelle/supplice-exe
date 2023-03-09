@@ -55,7 +55,7 @@
 #include "texturemanager.h"
 #include "d_main.h"
 
-// [BB] Use ZDoom's freelook limit for the sotfware renderer.
+// [BB] Use ZDoom's freelook limit for the software renderer.
 // Note: ZDoom's limit is chosen such that the sky is rendered properly.
 CUSTOM_CVAR (Bool, cl_oldfreelooklimit, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
 {
@@ -250,7 +250,7 @@ void FSoftwareRenderer::RenderTextureView (FCanvasTexture *camtex, AActor *viewp
 	CameraLight savedCameraLight = *CameraLight::Instance();
 
 	DAngle savedfov = cameraViewpoint.FieldOfView;
-	R_SetFOV (cameraViewpoint, fov);
+	R_SetFOV (cameraViewpoint, DAngle::fromDeg(fov));
 
 	mScene.RenderViewToCanvas(viewpoint, Canvas, 0, 0, tex->GetWidth(), tex->GetHeight(), camtex->bFirstUpdate);
 

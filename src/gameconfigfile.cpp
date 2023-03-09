@@ -73,6 +73,8 @@ EXTERN_CVAR(Float, m_sensitivity_y)
 EXTERN_CVAR(Int, adl_volume_model)
 EXTERN_CVAR (Int, gl_texture_hqresize_targets)
 EXTERN_CVAR(Int, wipetype)
+EXTERN_CVAR(Bool, i_pauseinbackground)
+EXTERN_CVAR(Bool, i_soundinbackground)
 
 #ifdef _WIN32
 EXTERN_CVAR(Int, in_mouse)
@@ -115,6 +117,7 @@ FGameConfigFile::FGameConfigFile ()
 		SetValueForKey ("Path", "$PROGDIR", true);
 #else
 		SetValueForKey ("Path", "$HOME/" GAME_DIR, true);
+		SetValueForKey ("Path", "$HOME/.local/share/games/doom", true);
 		// Arch Linux likes them in /usr/share/doom
 		// Debian likes them in /usr/share/games/doom
 		// I assume other distributions don't do anything radically different
@@ -138,6 +141,7 @@ FGameConfigFile::FGameConfigFile ()
 		SetValueForKey ("Path", "$PROGDIR", true);
 #else
 		SetValueForKey ("Path", "$HOME/" GAME_DIR, true);
+		SetValueForKey ("Path", "$HOME/.local/share/games/doom", true);
 		SetValueForKey ("Path", SHARE_DIR, true);
 		SetValueForKey ("Path", "/usr/local/share/doom", true);
 		SetValueForKey ("Path", "/usr/local/share/games/doom", true);
@@ -166,6 +170,8 @@ FGameConfigFile::FGameConfigFile ()
 #else
 		SetValueForKey("Path", "$HOME/" GAME_DIR "/soundfonts", true);
 		SetValueForKey("Path", "$HOME/" GAME_DIR "/fm_banks", true);
+		SetValueForKey("Path", "$HOME/.local/share/games/doom/soundfonts", true);
+		SetValueForKey("Path", "$HOME/.local/share/games/doom/fm_banks", true);
 		SetValueForKey("Path", "/usr/local/share/doom/soundfonts", true);
 		SetValueForKey("Path", "/usr/local/share/doom/fm_banks", true);
 		SetValueForKey("Path", "/usr/local/share/games/doom/soundfonts", true);
@@ -251,7 +257,7 @@ void FGameConfigFile::DoAutoloadSetup (FIWadManager *iwad_man)
 			{
 				FString section = workname + ".Autoload";
 				CreateSectionAtStart(section.GetChars());
-				long dotpos = workname.LastIndexOf('.');
+				auto dotpos = workname.LastIndexOf('.');
 				if (dotpos < 0) break;
 				workname.Truncate(dotpos);
 			}
@@ -587,6 +593,11 @@ void FGameConfigFile::DoGlobalSetup ()
 					if (v.Float < 1.f) v.Float = 1.f;
 				}
 			}
+			if (last < 223)
+			{
+				// ooooh boy did i open a can of worms with this one.
+				i_pauseinbackground = !(i_soundinbackground);
+			}
 		}
 	}
 }
@@ -911,40 +922,40 @@ void FGameConfigFile::SetRavenDefaults (bool isHexen)
 	UCVarValue val;
 
 	val.Bool = false;
-	wi_percents.SetGenericRepDefault (val, CVAR_Bool);
+	wi_percents->SetGenericRepDefault (val, CVAR_Bool);
 	val.Bool = true;
-	con_centernotify.SetGenericRepDefault (val, CVAR_Bool);
-	snd_pitched.SetGenericRepDefault (val, CVAR_Bool);
+	con_centernotify->SetGenericRepDefault (val, CVAR_Bool);
+	snd_pitched->SetGenericRepDefault (val, CVAR_Bool);
 	val.Int = 9;
-	msg0color.SetGenericRepDefault (val, CVAR_Int);
+	msg0color->SetGenericRepDefault (val, CVAR_Int);
 	val.Int = CR_WHITE;
-	msgmidcolor.SetGenericRepDefault (val, CVAR_Int);
+	msgmidcolor->SetGenericRepDefault (val, CVAR_Int);
 	val.Int = CR_YELLOW;
-	msgmidcolor2.SetGenericRepDefault (val, CVAR_Int);
+	msgmidcolor2->SetGenericRepDefault (val, CVAR_Int);
 
 	val.Int = 0x543b17;
-	am_wallcolor.SetGenericRepDefault (val, CVAR_Int);
+	am_wallcolor->SetGenericRepDefault (val, CVAR_Int);
 	val.Int = 0xd0b085;
-	am_fdwallcolor.SetGenericRepDefault (val, CVAR_Int);
+	am_fdwallcolor->SetGenericRepDefault (val, CVAR_Int);
 	val.Int = 0x734323;
-	am_cdwallcolor.SetGenericRepDefault (val, CVAR_Int);
+	am_cdwallcolor->SetGenericRepDefault (val, CVAR_Int);
 
 	val.Int = 0;
-	wipetype.SetGenericRepDefault(val, CVAR_Int);
+	wipetype->SetGenericRepDefault(val, CVAR_Int);
 
 	// Fix the Heretic/Hexen automap colors so they are correct.
 	// (They were wrong on older versions.)
 	if (*am_wallcolor == 0x2c1808 && *am_fdwallcolor == 0x887058 && *am_cdwallcolor == 0x4c3820)
 	{
-		am_wallcolor.ResetToDefault ();
-		am_fdwallcolor.ResetToDefault ();
-		am_cdwallcolor.ResetToDefault ();
+		am_wallcolor->ResetToDefault ();
+		am_fdwallcolor->ResetToDefault ();
+		am_cdwallcolor->ResetToDefault ();
 	}
 
 	if (!isHexen)
 	{
 		val.Int = 0x3f6040;
-		color.SetGenericRepDefault (val, CVAR_Int);
+		color->SetGenericRepDefault (val, CVAR_Int);
 	}
 }
 
@@ -952,7 +963,7 @@ void FGameConfigFile::SetStrifeDefaults ()
 {
 	UCVarValue val;
 	val.Int = 3;
-	wipetype.SetGenericRepDefault(val, CVAR_Int);
+	wipetype->SetGenericRepDefault(val, CVAR_Int);
 }
 
 CCMD (whereisini)

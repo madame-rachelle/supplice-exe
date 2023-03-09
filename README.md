@@ -1,10 +1,10 @@
 # Welcome to GZDoom!
 
-[![Build Status](https://github.com/coelckers/gzdoom/workflows/Continuous%20Integration/badge.svg)](https://github.com/coelckers/gzdoom/actions?query=workflow%3A%22Continuous+Integration%22)
+[![Continuous Integration](https://github.com/ZDoom/gzdoom/actions/workflows/continuous_integration.yml/badge.svg)](https://github.com/ZDoom/gzdoom/actions/workflows/continuous_integration.yml)
 
 ## GZDoom is a modder-friendly OpenGL and Vulkan source port based on the DOOM engine
 
-Copyright (c) 1998-2021 ZDoom + GZDoom teams, and contributors
+Copyright (c) 1998-2022 ZDoom + GZDoom teams, and contributors
 
 Doom Source (c) 1997 id Software, Raven Software, and contributors
 

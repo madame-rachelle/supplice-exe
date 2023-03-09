@@ -242,7 +242,7 @@ void ZCCDoomCompiler::DispatchProperty(FPropertyInfo *prop, ZCC_PropertyStmt *pr
 		const char * p = prop->params;
 		auto exp = property->Values;
 
-		FCompileContext ctx(OutNamespace, bag.Info->VMType, false);
+		FCompileContext ctx(OutNamespace, bag.Info->VMType, false, mVersion);
 		while (true)
 		{
 			FPropParam conv;
@@ -425,7 +425,7 @@ void ZCCDoomCompiler::DispatchScriptProperty(PProperty *prop, ZCC_PropertyStmt *
 	}
 
 	auto exp = property->Values;
-	FCompileContext ctx(OutNamespace, bag.Info->VMType, false);
+	FCompileContext ctx(OutNamespace, bag.Info->VMType, false, mVersion);
 	for (auto f : prop->Variables)
 	{
 		void *addr;
@@ -467,11 +467,11 @@ void ZCCDoomCompiler::DispatchScriptProperty(PProperty *prop, ZCC_PropertyStmt *
 		}
 		else if (f->Type == TypeSound)
 		{
-			*(FSoundID*)addr = GetStringConst(ex, ctx);
+			*(FSoundID*)addr = S_FindSound(GetStringConst(ex, ctx));
 		}
 		else if (f->Type == TypeColor && ex->ValueType == TypeString)	// colors can also be specified as ints.
 		{
-			*(PalEntry*)addr = V_GetColor(nullptr, GetStringConst(ex, ctx), &ex->ScriptPosition);
+			*(PalEntry*)addr = V_GetColor(GetStringConst(ex, ctx), &ex->ScriptPosition);
 		}
 		else if (f->Type->isIntCompatible())
 		{
@@ -907,7 +907,7 @@ void ZCCDoomCompiler::CompileStates()
 					{
 						state.sprite = GetSpriteIndex(sl->Sprite->GetChars());
 					}
-					FCompileContext ctx(OutNamespace, c->Type(), false);
+					FCompileContext ctx(OutNamespace, c->Type(), false, mVersion);
 					if (CheckRandom(sl->Duration))
 					{
 						auto func = static_cast<ZCC_ExprFuncCall *>(sl->Duration);

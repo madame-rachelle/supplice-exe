@@ -140,7 +140,7 @@ static bool isBright(DPSprite *psp)
 	if (psp != nullptr && psp->GetState() != nullptr)
 	{
 		bool disablefullbright = false;
-		FTextureID lump = sprites[psp->GetSprite()].GetSpriteFrame(psp->GetFrame(), 0, 0., nullptr);
+		FTextureID lump = sprites[psp->GetSprite()].GetSpriteFrame(psp->GetFrame(), 0, nullAngle, nullptr);
 		if (lump.isValid())
 		{
 			auto tex = TexMan.GetGameTexture(lump, true);
@@ -411,11 +411,12 @@ bool HUDSprite::GetWeaponRect(HWDrawInfo *di, DPSprite *psp, float sx, float sy,
 	float			tx;
 	float			scale;
 	float			scalex;
+	float			ftextureadj;
 	float			ftexturemid;
 
 	// decide which patch to use
 	bool mirror;
-	FTextureID lump = sprites[psp->GetSprite()].GetSpriteFrame(psp->GetFrame(), 0, 0., &mirror);
+	FTextureID lump = sprites[psp->GetSprite()].GetSpriteFrame(psp->GetFrame(), 0, nullAngle, &mirror);
 	if (!lump.isValid()) return false;
 
 	auto tex = TexMan.GetGameTexture(lump, false);
@@ -428,7 +429,7 @@ bool HUDSprite::GetWeaponRect(HWDrawInfo *di, DPSprite *psp, float sx, float sy,
 	FloatRect r = spi.GetSpriteRect();
 
 	// calculate edges of the shape
-	scalex = (320.0f / (240.0f * r_viewwindow.WidescreenRatio)) * vw / 320;
+	scalex = psp->baseScale.X * (320.0f / (240.0f * r_viewwindow.WidescreenRatio)) * (vw / 320);
 
 	float x1, y1, x2, y2, u1, v1, u2, v2;
 
@@ -445,9 +446,13 @@ bool HUDSprite::GetWeaponRect(HWDrawInfo *di, DPSprite *psp, float sx, float sy,
 	x2 += viewwindowx;
 
 	// killough 12/98: fix psprite positioning problem
-	ftexturemid = 100.f - sy - r.top - psp->GetYAdjust(screenblocks >= 11);
+	ftextureadj = (120.0f / psp->baseScale.Y) - 100.0f; // [XA] scale relative to weapon baseline
+	ftexturemid = 100.f - sy - r.top - psp->GetYAdjust(screenblocks >= 11) - ftextureadj;
 
-	scale = (SCREENHEIGHT*vw) / (SCREENWIDTH * 200.0f);
+	// [XA] note: Doom's native 1.2x aspect ratio was originally
+	// handled here by multiplying SCREENWIDTH by 200 instead of
+	// 240, but now the baseScale var defines this from now on.
+	scale = psp->baseScale.Y * (SCREENHEIGHT*vw) / (SCREENWIDTH * 240.0f);
 	y1 = viewwindowy + vh / 2 - (ftexturemid * scale);
 	y2 = y1 + (r.height * scale) + 1;
 
@@ -481,7 +486,7 @@ bool HUDSprite::GetWeaponRect(HWDrawInfo *di, DPSprite *psp, float sx, float sy,
 		const float cx = (flip) ? -psp->Coord[i].X : psp->Coord[i].X;
 		Vert.v[i] += FVector2(cx * scalex, psp->Coord[i].Y * scale);
 	}
-	if (psp->rotation != 0.0 || !psp->scale.isZero())
+	if (psp->rotation != nullAngle || !psp->scale.isZero())
 	{
 		// [MC] Sets up the alignment for starting the pivot at, in a corner.
 		float anchorx, anchory;
@@ -503,7 +508,7 @@ bool HUDSprite::GetWeaponRect(HWDrawInfo *di, DPSprite *psp, float sx, float sy,
 		// Handle PSPF_FLIP.
 		if (flip) anchorx = 1.0 - anchorx;
 
-		FAngle rot = float((flip) ? -psp->rotation.Degrees : psp->rotation.Degrees);
+		FAngle rot = FAngle::fromDeg(float((flip) ? -psp->rotation.Degrees() : psp->rotation.Degrees()));
 		const float cosang = rot.Cos();
 		const float sinang = rot.Sin();
 		
@@ -614,7 +619,7 @@ void HWDrawInfo::PreparePlayerSprites(sector_t * viewsector, area_t in_area)
 	for (DPSprite *psp = player->psprites; psp != nullptr && psp->GetID() < PSP_TARGETCENTER; psp = psp->GetNext())
 	{
 		if (!psp->GetState()) continue;
-		FSpriteModelFrame *smf = playermo->player->ReadyWeapon ? FindModelFrame(playermo->player->ReadyWeapon->GetClass(), psp->GetSprite(), psp->GetFrame(), false) : nullptr;
+		FSpriteModelFrame *smf = psp->Caller != nullptr ? FindModelFrame(psp->Caller->modelData != nullptr ? psp->Caller->modelData->modelDef != NAME_None ? PClass::FindActor(psp->Caller->modelData->modelDef) : psp->Caller->GetClass() : psp->Caller->GetClass(), psp->GetSprite(), psp->GetFrame(), false) : nullptr;
 		// This is an 'either-or' proposition. This maybe needs some work to allow overlays with weapon models but as originally implemented this just won't work.
 		if (smf && !hudModelStep) continue;
 		if (!smf && hudModelStep) continue;
@@ -641,6 +646,13 @@ void HWDrawInfo::PreparePlayerSprites(sector_t * viewsector, area_t in_area)
 			{
 				hw_GetDynModelLight(playermo, lightdata);
 				hudsprite.lightindex = screen->mLights->UploadLights(lightdata);
+				LightProbe* probe = FindLightProbe(playermo->Level, playermo->X(), playermo->Y(), playermo->Center());
+				if (probe)
+				{
+					hudsprite.dynrgb[0] = probe->Red;
+					hudsprite.dynrgb[1] = probe->Green;
+					hudsprite.dynrgb[2] = probe->Blue;
+				}
 			}
 		}
 

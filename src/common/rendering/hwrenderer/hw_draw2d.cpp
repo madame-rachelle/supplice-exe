@@ -51,14 +51,22 @@
 
 CVAR(Bool, gl_aalines, false, CVAR_ARCHIVE) 
 
-void Draw2D(F2DDrawer *drawer, FRenderState &state)
+void Draw2D(F2DDrawer* drawer, FRenderState& state)
+{
+	const auto& mScreenViewport = screen->mScreenViewport;
+	Draw2D(drawer, state, mScreenViewport.left, mScreenViewport.top, mScreenViewport.width, mScreenViewport.height);
+}
+
+void Draw2D(F2DDrawer* drawer, FRenderState& state, int x, int y, int width, int height)
 {
 	twoD.Clock();
 
-	const auto &mScreenViewport = screen->mScreenViewport;
-	state.SetViewport(mScreenViewport.left, mScreenViewport.top, mScreenViewport.width, mScreenViewport.height);
-	screen->mViewpoints->Set2D(state, twod->GetWidth(), twod->GetHeight());
+	state.SetViewport(x, y, width, height);
+	screen->mViewpoints->Set2D(state, drawer->GetWidth(), drawer->GetHeight());
 
+	state.EnableStencil(false);
+	state.SetStencil(0, SOP_Keep, SF_AllOn);
+	state.Clear(CT_Stencil);
 	state.EnableDepthTest(false);
 	state.EnableMultisampling(false);
 	state.EnableLineSmooth(gl_aalines);
@@ -88,8 +96,23 @@ void Draw2D(F2DDrawer *drawer, FRenderState &state)
 
 	for(auto &cmd : commands)
 	{
+		if (cmd.isSpecial != SpecialDrawCommand::NotSpecial)
+		{
+			if (cmd.isSpecial == SpecialDrawCommand::EnableStencil)
+			{
+				state.EnableStencil(cmd.stencilOn);
+			}
+			else if (cmd.isSpecial == SpecialDrawCommand::SetStencil)
+			{
+				state.SetStencil(cmd.stencilOffs, cmd.stencilOp, cmd.stencilFlags);
+			}
+			else if (cmd.isSpecial == SpecialDrawCommand::ClearStencil)
+			{
+				state.Clear(CT_Stencil);
+			}
+			continue;
+		}
 
-		int gltrans = -1;
 		state.SetRenderStyle(cmd.mRenderStyle);
 		state.EnableBrightmap(!(cmd.mRenderStyle.Flags & STYLEF_ColorIsFixed));
 		state.EnableFog(2);	// Special 2D mode 'fog'.
@@ -127,7 +150,7 @@ void Draw2D(F2DDrawer *drawer, FRenderState &state)
 		if (cmd.mFlags & F2DDrawer::DTF_Indexed) state.SetSoftLightLevel(cmd.mLightLevel);
 		state.SetLightParms(0, 0);
 
-		state.AlphaFunc(Alpha_GEqual, 0.f);
+		state.AlphaFunc(Alpha_Greater, 0.f);
 
 		if (cmd.useTransform)
 		{
@@ -178,22 +201,22 @@ void Draw2D(F2DDrawer *drawer, FRenderState &state)
 			state.EnableTexture(false);
 		}
 
-		if (cmd.shape2D != nullptr)
+		if (cmd.shape2DBufInfo != nullptr)
 		{
-			state.SetVertexBuffer(&cmd.shape2D->buffers[cmd.shape2DBufIndex]);
+			state.SetVertexBuffer(&cmd.shape2DBufInfo->buffers[cmd.shape2DBufIndex]);
 			state.DrawIndexed(DT_Triangles, 0, cmd.shape2DIndexCount);
 			state.SetVertexBuffer(&vb);
-			if (cmd.shape2DCommandCounter == cmd.shape2D->lastCommand)
+			if (cmd.shape2DCommandCounter == cmd.shape2DBufInfo->lastCommand)
 			{
-				cmd.shape2D->lastCommand = -1;
-				if (cmd.shape2D->bufIndex > 0)
+				cmd.shape2DBufInfo->lastCommand = -1;
+				if (cmd.shape2DBufInfo->bufIndex > 0)
 				{
-					cmd.shape2D->needsVertexUpload = true;
-					cmd.shape2D->buffers.Clear();
-					cmd.shape2D->bufIndex = -1;
+					cmd.shape2DBufInfo->needsVertexUpload = true;
+					cmd.shape2DBufInfo->buffers.Clear();
+					cmd.shape2DBufInfo->bufIndex = -1;
 				}
 			}
-			cmd.shape2D->uploadedOnce = false;
+			cmd.shape2DBufInfo->uploadedOnce = false;
 		}
 		else
 		{
@@ -226,6 +249,8 @@ void Draw2D(F2DDrawer *drawer, FRenderState &state)
 
 	state.SetRenderStyle(STYLE_Translucent);
 	state.SetVertexBuffer(screen->mVertexData);
+	state.EnableStencil(false);
+	state.SetStencil(0, SOP_Keep, SF_AllOn);
 	state.EnableTexture(true);
 	state.EnableBrightmap(true);
 	state.SetTextureMode(TM_NORMAL);

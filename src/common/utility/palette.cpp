@@ -39,14 +39,14 @@
 #include "files.h"
 #include "filesystem.h"
 #include "printf.h"
-#include "templates.h"
+
 #include "m_png.h"
 
 /****************************/
 /* Palette management stuff */
 /****************************/
 
-int BestColor (const uint32_t *pal_in, int r, int g, int b, int first, int num)
+int BestColor (const uint32_t *pal_in, int r, int g, int b, int first, int num, const uint8_t* indexmap)
 {
 	const PalEntry *pal = (const PalEntry *)pal_in;
 	int bestcolor = first;
@@ -54,17 +54,18 @@ int BestColor (const uint32_t *pal_in, int r, int g, int b, int first, int num)
 
 	for (int color = first; color < num; color++)
 	{
-		int x = r - pal[color].r;
-		int y = g - pal[color].g;
-		int z = b - pal[color].b;
+		int co = indexmap ? indexmap[color] : color;
+		int x = r - pal[co].r;
+		int y = g - pal[co].g;
+		int z = b - pal[co].b;
 		int dist = x*x + y*y + z*z;
 		if (dist < bestdist)
 		{
 			if (dist == 0)
-				return color;
+				return co;
 
 			bestdist = dist;
-			bestcolor = color;
+			bestcolor = co;
 		}
 	}
 	return bestcolor;
@@ -423,13 +424,42 @@ void MakeGoodRemap(uint32_t* BaseColors, uint8_t* Remap)
 	PalEntry color0 = BaseColors[0];
 	int i;
 
-	// First try for an exact match of color 0. Only Hexen does not have one.
-	for (i = 1; i < 256; ++i)
+	// we have to load the colormap ourselves, because at this stage the colormaps have not yet been loaded
+	int lump = fileSystem.CheckNumForFullName ("COLORMAP", true, ns_colormaps);
+	if (lump == -1)
+		lump = fileSystem.CheckNumForName ("COLORMAP", ns_global);
+
+	FileReader readlump;
+	TArray<uint8_t> maincolormap(8192);
+	uint8_t *lastcolormap = maincolormap.Data() + 7936;
+
+	if (lump != -1)
 	{
-		if (BaseColors[i] == color0)
+		readlump = fileSystem.OpenFileReader (lump);
+		readlump.Read (maincolormap.Data(), 8192);
+	}
+
+	// First try for an exact match of color 0. Only Hexen does not have one.
+	if ((lump == -1) || !lastcolormap)
+	{
+		for (i = 1; i < 256; ++i)
 		{
-			Remap[0] = i;
-			break;
+			if (BaseColors[i] == color0)
+			{
+				Remap[0] = i;
+				break;
+			}
+		}
+	}
+	else
+	{
+		for (i = 1; i < 256; ++i)
+		{
+			if ((BaseColors[i] == color0) && (lastcolormap[i] == lastcolormap[0]))
+			{
+				Remap[0] = i;
+				break;
+			}
 		}
 	}
 
@@ -447,21 +477,44 @@ void MakeGoodRemap(uint32_t* BaseColors, uint8_t* Remap)
 			sortcopy[i] = (BaseColors[i] & 0xffffff) | (i << 24);
 		}
 		qsort(sortcopy, 256, 4, sortforremap);
-		for (i = 255; i > 0; --i)
+		if ((lump == -1) || !lastcolormap)
 		{
-			if ((sortcopy[i] & 0xFFFFFF) == (sortcopy[i - 1] & 0xFFFFFF))
+			for (i = 255; i > 0; --i)
 			{
-				int new0 = sortcopy[i].a;
-				int dup = sortcopy[i - 1].a;
-				if (new0 > dup)
+				if ((sortcopy[i] & 0xFFFFFF) == (sortcopy[i - 1] & 0xFFFFFF))
 				{
-					// Make the lower-numbered entry a copy of color 0. (Just because.)
-					std::swap(new0, dup);
+					int new0 = sortcopy[i].a;
+					int dup = sortcopy[i - 1].a;
+					if (new0 > dup)
+					{
+						// Make the lower-numbered entry a copy of color 0. (Just because.)
+						std::swap(new0, dup);
+					}
+					Remap[0] = new0;
+					Remap[new0] = dup;
+					BaseColors[new0] = color0;
+					break;
 				}
-				Remap[0] = new0;
-				Remap[new0] = dup;
-				BaseColors[new0] = color0;
-				break;
+			}
+		}
+		else
+		{
+			for (i = 255; i > 0; --i)
+			{
+				if (((sortcopy[i] & 0xFFFFFF) == (sortcopy[i - 1] & 0xFFFFFF)) && (lastcolormap[sortcopy[i].a] == lastcolormap[sortcopy[i - 1].a]))
+				{
+					int new0 = sortcopy[i].a;
+					int dup = sortcopy[i - 1].a;
+					if (new0 > dup)
+					{
+						// Make the lower-numbered entry a copy of color 0. (Just because.)
+						std::swap(new0, dup);
+					}
+					Remap[0] = new0;
+					Remap[new0] = dup;
+					BaseColors[new0] = color0;
+					break;
+				}
 			}
 		}
 	}
@@ -499,7 +552,7 @@ PalEntry averageColor(const uint32_t* data, int size, int maxout)
 	g = g / size;
 	b = b / size;
 
-	int maxv = MAX(MAX(r, g), b);
+	int maxv = max(max(r, g), b);
 
 	if (maxv && maxout)
 	{
@@ -523,7 +576,7 @@ PalEntry averageColor(const uint32_t* data, int size, int maxout)
 //
 //==========================================================================
 
-int V_GetColorFromString(const uint32_t* palette, const char* cstr, FScriptPosition* sc)
+int V_GetColorFromString(const char* cstr, FScriptPosition* sc)
 {
 	int c[3], i, p;
 	char val[3];
@@ -564,9 +617,9 @@ int V_GetColorFromString(const uint32_t* palette, const char* cstr, FScriptPosit
 	{
 		if (strlen(cstr) == 6)
 		{
-			char* p;
-			int color = strtol(cstr, &p, 16);
-			if (*p == 0)
+			char* endp;
+			int color = strtol(cstr, &endp, 16);
+			if (*endp == 0)
 			{
 				// RRGGBB string
 				c[0] = (color & 0xff0000) >> 16;
@@ -609,10 +662,7 @@ int V_GetColorFromString(const uint32_t* palette, const char* cstr, FScriptPosit
 			}
 		}
 	}
-	if (palette)
-		return BestColor(palette, c[0], c[1], c[2]);
-	else
-		return MAKERGB(c[0], c[1], c[2]);
+	return MAKERGB(c[0], c[1], c[2]);
 }
 
 //==========================================================================
@@ -715,26 +765,26 @@ FString V_GetColorStringByName(const char* name, FScriptPosition* sc)
 //
 //==========================================================================
 
-int V_GetColor(const uint32_t* palette, const char* str, FScriptPosition* sc)
+int V_GetColor(const char* str, FScriptPosition* sc)
 {
 	FString string = V_GetColorStringByName(str, sc);
 	int res;
 
 	if (!string.IsEmpty())
 	{
-		res = V_GetColorFromString(palette, string, sc);
+		res = V_GetColorFromString(string, sc);
 	}
 	else
 	{
-		res = V_GetColorFromString(palette, str, sc);
+		res = V_GetColorFromString(str, sc);
 	}
 	return res;
 }
 
-int V_GetColor(const uint32_t* palette, FScanner& sc)
+int V_GetColor(FScanner& sc)
 {
 	FScriptPosition scc = sc;
-	return V_GetColor(palette, sc.String, &scc);
+	return V_GetColor(sc.String, &scc);
 }
 
 //==========================================================================
@@ -804,9 +854,9 @@ void UpdateSpecialColormap(PalEntry* BaseColors, unsigned int index, float r1, f
 				BaseColors[c].g * 143 +
 				BaseColors[c].b * 37) / 256.0;
 
-			PalEntry pe = PalEntry(std::min(255, int(r1 + intensity * r2)),
-				std::min(255, int(g1 + intensity * g2)),
-				std::min(255, int(b1 + intensity * b2)));
+			PalEntry pe = PalEntry(min(255, int(r1 + intensity * r2)),
+				min(255, int(g1 + intensity * g2)),
+				min(255, int(b1 + intensity * b2)));
 
 			cm->Colormap[c] = BestColor((uint32_t*)BaseColors, pe.r, pe.g, pe.b);
 		}
@@ -815,9 +865,9 @@ void UpdateSpecialColormap(PalEntry* BaseColors, unsigned int index, float r1, f
 	// This table is used by the texture composition code
 	for (int i = 0; i < 256; i++)
 	{
-		cm->GrayscaleToColor[i] = PalEntry(std::min(255, int(r1 + i * r2)),
-			std::min(255, int(g1 + i * g2)),
-			std::min(255, int(b1 + i * b2)));
+		cm->GrayscaleToColor[i] = PalEntry(min(255, int(r1 + i * r2)),
+			min(255, int(g1 + i * g2)),
+			min(255, int(b1 + i * b2)));
 	}
 }
 
@@ -905,7 +955,6 @@ int ReadPalette(int lumpnum, uint8_t* buffer)
 		fr.Seek(33, FileReader::SeekSet);
 		fr.Read(&len, 4);
 		fr.Read(&id, 4);
-		bool succeeded = false;
 		while (id != MAKE_ID('I', 'D', 'A', 'T') && id != MAKE_ID('I', 'E', 'N', 'D'))
 		{
 			len = BigLong((unsigned int)len);
@@ -913,7 +962,7 @@ int ReadPalette(int lumpnum, uint8_t* buffer)
 				fr.Seek(len, FileReader::SeekCur);
 			else
 			{
-				int PaletteSize = MIN<int>(len, 768);
+				int PaletteSize = min<int>(len, 768);
 				fr.Read(buffer, PaletteSize);
 				return PaletteSize / 3;
 			}
@@ -932,7 +981,7 @@ int ReadPalette(int lumpnum, uint8_t* buffer)
 		sc.MustGetString();
 		sc.MustGetNumber();	// version - ignore
 		sc.MustGetNumber();
-		int colors = MIN(256, sc.Number) * 3;
+		int colors = min(256, sc.Number) * 3;
 		for (int i = 0; i < colors; i++)
 		{
 			sc.MustGetNumber();
@@ -946,7 +995,7 @@ int ReadPalette(int lumpnum, uint8_t* buffer)
 	}
 	else
 	{
-		memcpy(buffer, lumpmem, MIN<size_t>(768, lump.GetSize()));
+		memcpy(buffer, lumpmem, min<size_t>(768, lump.GetSize()));
 		return 256;
 	}
 }

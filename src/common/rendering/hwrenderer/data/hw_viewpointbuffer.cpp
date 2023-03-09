@@ -6,7 +6,7 @@
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 2 of the License, or
 // (at your option) any later version.
 //
 // This program is distributed in the hope that it will be useful,
@@ -33,16 +33,21 @@
 
 static const int INITIAL_BUFFER_SIZE = 100;	// 100 viewpoints per frame should nearly always be enough
 
-HWViewpointBuffer::HWViewpointBuffer()
+HWViewpointBuffer::HWViewpointBuffer(int pipelineNbr):
+	mPipelineNbr(pipelineNbr)
 {
 	mBufferSize = INITIAL_BUFFER_SIZE;
 	mBlockAlign = ((sizeof(HWViewpointUniforms) / screen->uniformblockalignment) + 1) * screen->uniformblockalignment;
 	mByteSize = mBufferSize * mBlockAlign;
-	mBuffer = screen->CreateDataBuffer(VIEWPOINT_BINDINGPOINT, false, true);
-	mBuffer->SetData(mByteSize, nullptr, false);
+
+	for (int n = 0; n < mPipelineNbr; n++)
+	{
+		mBufferPipeline[n] = screen->CreateDataBuffer(VIEWPOINT_BINDINGPOINT, false, true);
+		mBufferPipeline[n]->SetData(mByteSize, nullptr, BufferUsageType::Persistent);
+	}
+
 	Clear();
 	mLastMappedIndex = UINT_MAX;
-	mClipPlaneInfo.Push(0);
 }
 
 HWViewpointBuffer::~HWViewpointBuffer()
@@ -57,8 +62,10 @@ void HWViewpointBuffer::CheckSize()
 	{
 		mBufferSize *= 2;
 		mByteSize *= 2;
-		mBuffer->Resize(mByteSize);
-		m2DHeight = m2DWidth = -1;
+		for (int n = 0; n < mPipelineNbr; n++)
+		{
+			mBufferPipeline[n]->Resize(mByteSize);
+		}
 	}
 }
 
@@ -75,28 +82,26 @@ int HWViewpointBuffer::Bind(FRenderState &di, unsigned int index)
 
 void HWViewpointBuffer::Set2D(FRenderState &di, int width, int height, int pll)
 {
-	if (width != m2DWidth || height != m2DHeight)
-	{
-		HWViewpointUniforms matrices;
+	HWViewpointUniforms matrices;
 
-		matrices.mViewMatrix.loadIdentity();
-		matrices.mNormalViewMatrix.loadIdentity();
-		matrices.mViewHeight = 0;
-		matrices.mGlobVis = 1.f;
-		matrices.mPalLightLevels = pll;
-		matrices.mClipLine.X = -10000000.0f;
-		matrices.mShadowmapFilter = gl_shadowmap_filter;
+	matrices.mViewMatrix.loadIdentity();
+	matrices.mNormalViewMatrix.loadIdentity();
+	matrices.mViewHeight = 0;
+	matrices.mGlobVis = 1.f;
+	matrices.mPalLightLevels = pll;
+	matrices.mClipLine.X = -10000000.0f;
+	matrices.mShadowmapFilter = gl_shadowmap_filter;
 
-		matrices.mProjectionMatrix.ortho(0, (float)width, (float)height, 0, -1.0f, 1.0f);
-		matrices.CalcDependencies();
-		mBuffer->Map();
-		memcpy(mBuffer->Memory(), &matrices, sizeof(matrices));
-		mBuffer->Unmap();
-		m2DWidth = width;
-		m2DHeight = height;
-		mLastMappedIndex = -1;
-	}
-	Bind(di, 0);
+	matrices.mProjectionMatrix.ortho(0, (float)width, (float)height, 0, -1.0f, 1.0f);
+	matrices.CalcDependencies();
+
+	mBuffer->Map();
+	memcpy(((char*)mBuffer->Memory()) + mUploadIndex * mBlockAlign, &matrices, sizeof(matrices));
+	mBuffer->Unmap();
+
+	mClipPlaneInfo.Push(0);
+
+	Bind(di, mUploadIndex++);
 }
 
 int HWViewpointBuffer::SetViewpoint(FRenderState &di, HWViewpointUniforms *vp)
@@ -112,8 +117,17 @@ int HWViewpointBuffer::SetViewpoint(FRenderState &di, HWViewpointUniforms *vp)
 
 void HWViewpointBuffer::Clear()
 {
-	// Index 0 is reserved for the 2D projection.
-	mUploadIndex = 1;
-	mClipPlaneInfo.Resize(1);
+	bool needNewPipeline = mUploadIndex > 0; // Clear might be called multiple times before any actual rendering
+
+	mUploadIndex = 0;
+	mClipPlaneInfo.Clear();
+
+	if (needNewPipeline)
+	{
+		mPipelinePos++;
+		mPipelinePos %= mPipelineNbr;
+	}
+
+	mBuffer = mBufferPipeline[mPipelinePos];
 }
 

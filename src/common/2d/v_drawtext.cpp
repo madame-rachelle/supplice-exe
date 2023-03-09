@@ -173,22 +173,21 @@ void DrawChar(F2DDrawer *drawer, FFont* font, int normalcolor, double x, double 
 
 	FGameTexture* pic;
 	int dummy;
-	bool redirected;
 
-	if (NULL != (pic = font->GetChar(character, normalcolor, &dummy, &redirected)))
+	if (NULL != (pic = font->GetChar(character, normalcolor, &dummy)))
 	{
 		DrawParms parms;
 		Va_List tags;
 		va_start(tags.list, tag_first);
-		bool res = ParseDrawTextureTags(drawer, pic, x, y, tag_first, tags, &parms, false);
+		bool res = ParseDrawTextureTags(drawer, pic, x, y, tag_first, tags, &parms, DrawTexture_Normal);
 		va_end(tags.list);
 		if (!res)
 		{
 			return;
 		}
-		bool palettetrans = (normalcolor == CR_UNDEFINED && parms.TranslationId != 0);
+		bool palettetrans = (normalcolor == CR_NATIVEPAL && parms.TranslationId != 0);
 		PalEntry color = 0xffffffff;
-		if (!palettetrans) parms.TranslationId = redirected ? -1 : font->GetColorTranslation((EColorRange)normalcolor, &color);
+		if (!palettetrans) parms.TranslationId = font->GetColorTranslation((EColorRange)normalcolor, &color);
 		parms.color = PalEntry((color.a * parms.color.a) / 255, (color.r * parms.color.r) / 255, (color.g * parms.color.g) / 255, (color.b * parms.color.b) / 255);
 		drawer->AddTexture(pic, parms);
 	}
@@ -204,17 +203,16 @@ void DrawChar(F2DDrawer *drawer,  FFont *font, int normalcolor, double x, double
 
 	FGameTexture *pic;
 	int dummy;
-	bool redirected;
 
-	if (NULL != (pic = font->GetChar(character, normalcolor, &dummy, &redirected)))
+	if (NULL != (pic = font->GetChar(character, normalcolor, &dummy)))
 	{
 		DrawParms parms;
 		uint32_t tag = ListGetInt(args);
-		bool res = ParseDrawTextureTags(drawer, pic, x, y, tag, args, &parms, false);
+		bool res = ParseDrawTextureTags(drawer, pic, x, y, tag, args, &parms, DrawTexture_Normal);
 		if (!res) return;
-		bool palettetrans = (normalcolor == CR_UNDEFINED && parms.TranslationId != 0);
+		bool palettetrans = (normalcolor == CR_NATIVEPAL && parms.TranslationId != 0);
 		PalEntry color = 0xffffffff;
-		if (!palettetrans) parms.TranslationId = redirected ? -1 : font->GetColorTranslation((EColorRange)normalcolor, &color);
+		if (!palettetrans) parms.TranslationId = font->GetColorTranslation((EColorRange)normalcolor, &color);
 		parms.color = PalEntry((color.a * parms.color.a) / 255, (color.r * parms.color.r) / 255, (color.g * parms.color.g) / 255, (color.b * parms.color.b) / 255);
 		drawer->AddTexture(pic, parms);
 	}
@@ -237,6 +235,23 @@ DEFINE_ACTION_FUNCTION(_Screen, DrawChar)
 	return 0;
 }
 
+DEFINE_ACTION_FUNCTION(FCanvas, DrawChar)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_POINTER(font, FFont);
+	PARAM_INT(cr);
+	PARAM_FLOAT(x);
+	PARAM_FLOAT(y);
+	PARAM_INT(chr);
+
+	PARAM_VA_POINTER(va_reginfo)	// Get the hidden type information array
+
+	VMVa_List args = { param + 6, 0, numparam - 7, va_reginfo + 6 };
+	DrawChar(&self->Drawer, font, cr, x, y, chr, args);
+	self->Tex->NeedUpdate();
+	return 0;
+}
+
 //==========================================================================
 //
 // DrawText
@@ -246,7 +261,7 @@ DEFINE_ACTION_FUNCTION(_Screen, DrawChar)
 //==========================================================================
 
 // This is only needed as a dummy. The code using wide strings does not need color control.
-EColorRange V_ParseFontColor(const char32_t *&color_value, int normalcolor, int boldcolor) { return CR_UNTRANSLATED; } 
+EColorRange V_ParseFontColor(const char32_t *&color_value, int normalcolor, int boldcolor) { return CR_UNTRANSLATED; }
 
 template<class chartype>
 void DrawTextCommon(F2DDrawer *drawer, FFont *font, int normalcolor, double x, double y, const chartype *string, DrawParms &parms)
@@ -267,7 +282,7 @@ void DrawTextCommon(F2DDrawer *drawer, FFont *font, int normalcolor, double x, d
 	if (parms.celly == 0) parms.celly = font->GetHeight() + 1;
 	parms.celly = int (parms.celly * scaley);
 
-	bool palettetrans = (normalcolor == CR_UNDEFINED && parms.TranslationId != 0);
+	bool palettetrans = (normalcolor == CR_NATIVEPAL && parms.TranslationId != 0);
 
 	if (normalcolor >= NumTextColors)
 		normalcolor = CR_UNTRANSLATED;
@@ -316,11 +331,10 @@ void DrawTextCommon(F2DDrawer *drawer, FFont *font, int normalcolor, double x, d
 			continue;
 		}
 
-		bool redirected = false;
-		if (NULL != (pic = font->GetChar(c, currentcolor, &w, &redirected)))
+		if (NULL != (pic = font->GetChar(c, currentcolor, &w)))
 		{
 			// if palette translation is used, font colors will be ignored.
-			if (!palettetrans) parms.TranslationId = redirected? -1 : trans;
+			if (!palettetrans) parms.TranslationId = trans;
 			SetTextureParms(drawer, &parms, pic, cx, cy);
 			if (parms.cellx)
 			{
@@ -360,7 +374,7 @@ void DrawText(F2DDrawer *drawer, FFont* font, int normalcolor, double x, double 
 		return;
 
 	va_start(tags.list, tag_first);
-	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag_first, tags, &parms, true);
+	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag_first, tags, &parms, DrawTexture_Text);
 	va_end(tags.list);
 	if (!res)
 	{
@@ -379,7 +393,7 @@ void DrawText(F2DDrawer *drawer, FFont* font, int normalcolor, double x, double 
 		return;
 
 	va_start(tags.list, tag_first);
-	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag_first, tags, &parms, true);
+	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag_first, tags, &parms, DrawTexture_Text);
 	va_end(tags.list);
 	if (!res)
 	{
@@ -397,7 +411,7 @@ void DrawText(F2DDrawer *drawer, FFont *font, int normalcolor, double x, double 
 		return;
 
 	uint32_t tag = ListGetInt(args);
-	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag, args, &parms, true);
+	bool res = ParseDrawTextureTags(drawer, nullptr, 0, 0, tag, args, &parms, DrawTexture_Text);
 	if (!res)
 	{
 		return;
@@ -423,3 +437,21 @@ DEFINE_ACTION_FUNCTION(_Screen, DrawText)
 	return 0;
 }
 
+
+DEFINE_ACTION_FUNCTION(FCanvas, DrawText)
+{
+	PARAM_SELF_PROLOGUE(FCanvas);
+	PARAM_POINTER_NOT_NULL(font, FFont);
+	PARAM_INT(cr);
+	PARAM_FLOAT(x);
+	PARAM_FLOAT(y);
+	PARAM_STRING(chr);
+
+	PARAM_VA_POINTER(va_reginfo)	// Get the hidden type information array
+
+	VMVa_List args = { param + 6, 0, numparam - 7, va_reginfo + 6 };
+	const char *txt = chr[0] == '$' ? GStrings(&chr[1]) : chr.GetChars();
+	DrawText(&self->Drawer, font, cr, x, y, txt, args);
+	self->Tex->NeedUpdate();
+	return 0;
+}

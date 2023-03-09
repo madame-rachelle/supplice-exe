@@ -615,17 +615,17 @@ inline int DoubleToACS(double val)
 
 inline DAngle ACSToAngle(int acsval)
 {
-	return acsval * (360. / 65536.);
+	return DAngle::fromQ16(acsval);
 }
 
 inline int AngleToACS(DAngle ang)
 {
-	return ang.BAMs() >> 16;
+	return ang.Normalized360().Q16();
 }
 
 inline int PitchToACS(DAngle ang)
 {
-	return int(ang.Normalized180().Degrees * (65536. / 360));
+	return ang.Normalized180().Q16();
 }
 
 struct CallReturn
@@ -2454,7 +2454,7 @@ bool FBehavior::Init(FLevelLocals *Level, int lumpnum, FileReader * fr, int len,
 				// Use unsigned iterator here to avoid issue with GCC 4.9/5.x
 				// optimizer. Might be some undefined behavior in this code,
 				// but I don't know what it is.
-				unsigned int initsize = MIN<unsigned int> (ArrayStore[arraynum].ArraySize, (LittleLong(chunk[1])-4)/4);
+				unsigned int initsize = min<unsigned int> (ArrayStore[arraynum].ArraySize, (LittleLong(chunk[1])-4)/4);
 				int32_t *elems = ArrayStore[arraynum].Elements;
 				for (unsigned int j = 0; j < initsize; ++j)
 				{
@@ -2532,7 +2532,7 @@ bool FBehavior::Init(FLevelLocals *Level, int lumpnum, FileReader * fr, int len,
 					{
 						int32_t *elems = ArrayStore[arraynum].Elements;
 						// Ending zeros may be left out.
-						for (int j = MIN(LittleLong(chunk[1])-5, ArrayStore[arraynum].ArraySize); j > 0; --j, ++elems, ++chunkData)
+						for (int j = min(LittleLong(chunk[1])-5, ArrayStore[arraynum].ArraySize); j > 0; --j, ++elems, ++chunkData)
 						{
 							// For ATAG, a value of 0 = Integer, 1 = String, 2 = FunctionPtr
 							// Our implementation uses the same tags for both String and FunctionPtr
@@ -3791,7 +3791,7 @@ int DLevelScript::DoSpawn (int type, const DVector3 &pos, int tid, DAngle angle,
 
 int DLevelScript::DoSpawn(int type, int x, int y, int z, int tid, int angle, bool force)
 {
-	return DoSpawn(type, DVector3(ACSToDouble(x), ACSToDouble(y), ACSToDouble(z)), tid, angle * (360. / 256), force);
+	return DoSpawn(type, DVector3(ACSToDouble(x), ACSToDouble(y), ACSToDouble(z)), tid, DAngle::fromDeg(angle * (360. / 256)), force);
 }
 
 
@@ -3806,12 +3806,12 @@ int DLevelScript::DoSpawnSpot (int type, int spot, int tid, int angle, bool forc
 
 		while ( (aspot = iterator.Next ()) )
 		{
-			spawned += DoSpawn (type, aspot->Pos(), tid, angle * (360. / 256), force);
+			spawned += DoSpawn (type, aspot->Pos(), tid, DAngle::fromDeg(angle * (360. / 256)), force);
 		}
 	}
 	else if (activator != NULL)
 	{
-		spawned += DoSpawn (type, activator->Pos(), tid, angle * (360. / 256), force);
+		spawned += DoSpawn (type, activator->Pos(), tid, DAngle::fromDeg(angle * (360. / 256)), force);
 	}
 	return spawned;
 }
@@ -4044,6 +4044,8 @@ enum
 	APROP_MaxStepHeight	= 44,
 	APROP_MaxDropOffHeight= 45,
 	APROP_DamageType	= 46,
+	APROP_SoundClass	= 47,
+	APROP_FriendlySeeBlocks= 48,
 };
 
 // These are needed for ACS's APROP_RenderStyle
@@ -4198,23 +4200,23 @@ void DLevelScript::DoSetActorProperty (AActor *actor, int property, int value)
 		break;
 
 	case APROP_SeeSound:
-		actor->SeeSound = Level->Behaviors.LookupString(value);
+		actor->SeeSound = S_FindSound(Level->Behaviors.LookupString(value));
 		break;
 
 	case APROP_AttackSound:
-		actor->AttackSound = Level->Behaviors.LookupString(value);
+		actor->AttackSound = S_FindSound(Level->Behaviors.LookupString(value));
 		break;
 
 	case APROP_PainSound:
-		actor->PainSound = Level->Behaviors.LookupString(value);
+		actor->PainSound = S_FindSound(Level->Behaviors.LookupString(value));
 		break;
 
 	case APROP_DeathSound:
-		actor->DeathSound = Level->Behaviors.LookupString(value);
+		actor->DeathSound = S_FindSound(Level->Behaviors.LookupString(value));
 		break;
 
 	case APROP_ActiveSound:
-		actor->ActiveSound = Level->Behaviors.LookupString(value);
+		actor->ActiveSound = S_FindSound(Level->Behaviors.LookupString(value));
 		break;
 
 	case APROP_Species:
@@ -4244,11 +4246,11 @@ void DLevelScript::DoSetActorProperty (AActor *actor, int property, int value)
 		break;
 
 	case APROP_ScaleX:
-		actor->Scale.X = ACSToDouble(value);
+		actor->Scale.X = (float)ACSToDouble(value);
 		break;
 
 	case APROP_ScaleY:
-		actor->Scale.Y = ACSToDouble(value);
+		actor->Scale.Y = (float)ACSToDouble(value);
 		break;
 
 	case APROP_Mass:
@@ -4305,6 +4307,19 @@ void DLevelScript::DoSetActorProperty (AActor *actor, int property, int value)
 
 	case APROP_DamageType:
 		actor->DamageType = Level->Behaviors.LookupString(value);
+		break;
+
+	case APROP_SoundClass:
+		if (actor->IsKindOf(NAME_PlayerPawn))
+		{
+			if (actor->player != nullptr)
+			{
+				actor->player->SoundClass = Level->Behaviors.LookupString(value);
+			}
+		}	
+		break;
+	case APROP_FriendlySeeBlocks:
+		actor->friendlyseeblocks = value;
 		break;
 
 	default:
@@ -4404,6 +4419,8 @@ int DLevelScript::GetActorProperty (int tid, int property)
 	case APROP_MaxStepHeight: return DoubleToACS(actor->MaxStepHeight);
 	case APROP_MaxDropOffHeight: return DoubleToACS(actor->MaxDropOffHeight);
 	case APROP_DamageType:	return GlobalACSStrings.AddString(actor->DamageType.GetChars());
+	case APROP_SoundClass:	return GlobalACSStrings.AddString(S_GetSoundClass(actor));
+	case APROP_FriendlySeeBlocks: return actor->friendlyseeblocks;
 
 	default:				return 0;
 	}
@@ -4453,6 +4470,7 @@ int DLevelScript::CheckActorProperty (int tid, int property, int value)
 		case APROP_MaxStepHeight:
 		case APROP_MaxDropOffHeight:
 		case APROP_StencilColor:
+		case APROP_FriendlySeeBlocks:
 			return (GetActorProperty(tid, property) == value);
 
 		// Boolean values need to compare to a binary version of value
@@ -4477,6 +4495,7 @@ int DLevelScript::CheckActorProperty (int tid, int property, int value)
 		case APROP_Species:		string = actor->GetSpecies().GetChars(); break;
 		case APROP_NameTag:		string = actor->GetTag(); break;
 		case APROP_DamageType:	string = actor->DamageType.GetChars(); break;
+		case APROP_SoundClass:  string = S_GetSoundClass(actor); break;
 	}
 	if (string == NULL) string = "";
 	return (!stricmp(string, Level->Behaviors.LookupString(value)));
@@ -4636,6 +4655,7 @@ enum
 	SOUND_WallBounce,
 	SOUND_CrushPain,
 	SOUND_Howl,
+	SOUND_Push,
 };
 
 static FSoundID GetActorSound(AActor *actor, int soundtype)
@@ -4652,7 +4672,8 @@ static FSoundID GetActorSound(AActor *actor, int soundtype)
 	case SOUND_WallBounce:	return actor->WallBounceSound;
 	case SOUND_CrushPain:	return actor->CrushPainSound;
 	case SOUND_Howl:		return actor->SoundVar(NAME_HowlSound);
-	default:				return 0;
+	case SOUND_Push:		return actor->SoundVar(NAME_PushSound);
+	default:				return NO_SOUND;
 	}
 }
 
@@ -5238,7 +5259,7 @@ int DLevelScript::SwapActorTeleFog(AActor *activator, int tid)
 			}
 			else if (argtype == TypeSound)
 			{
-				params.Push(int(FSoundID(Level->Behaviors.LookupString(args[i]))));
+				params.Push(S_FindSound(Level->Behaviors.LookupString(args[i])).index());
 			}
 			else
 			{
@@ -5271,7 +5292,7 @@ int DLevelScript::SwapActorTeleFog(AActor *activator, int tid)
 				}
 				else if (rettype == TypeSound)
 				{
-					retval = GlobalACSStrings.AddString(S_GetSoundName(FSoundID(retval)));
+					retval = GlobalACSStrings.AddString(S_GetSoundName(FSoundID::fromInt(retval)));
 				}
 			}
 			else if (rettype == TypeFloat64)
@@ -5602,7 +5623,7 @@ int DLevelScript::CallFunction(int argCount, int funcIndex, int32_t *args)
 		}
 
 		case ACSF_Radius_Quake2:
-			P_StartQuake(Level, activator, args[0], args[1], args[2], args[3], args[4], Level->Behaviors.LookupString(args[5]));
+			P_StartQuake(Level, activator, args[0], args[1], args[2], args[3], args[4], S_FindSound(Level->Behaviors.LookupString(args[5])));
 			break;
 
 		case ACSF_CheckActorClass:
@@ -5882,17 +5903,17 @@ int DLevelScript::CallFunction(int argCount, int funcIndex, int32_t *args)
 		case ACSF_PlayActorSound:
 			// PlaySound(tid, "SoundName", channel, volume, looping, attenuation, local)
 			{
-				FSoundID sid = 0;
+				FSoundID sid = NO_SOUND;
 
 				if (funcIndex == ACSF_PlaySound)
 				{
 					const char *lookup = Level->Behaviors.LookupString(args[1]);
 					if (lookup != NULL)
 					{
-						sid = lookup;
+						sid = S_FindSound(lookup);
 					}
 				}
-				if (sid != 0 || funcIndex == ACSF_PlayActorSound)
+				if (sid != NO_SOUND || funcIndex == ACSF_PlayActorSound)
 				{
 					auto it = Level->GetActorIterator(args[0]);
 					AActor *spot;
@@ -5914,7 +5935,7 @@ doplaysound:			if (funcIndex == ACSF_PlayActorSound)
 						{
 							sid = GetActorSound(spot, args[1]);
 						}
-						if (sid != 0)
+						if (sid != NO_SOUND)
 						{
 							// What a mess. I think it's a given that this was used with sound flags so it will forever be restricted to the original 8 channels.
 							if (local) chan |= CHANF_LOCAL;
@@ -6175,7 +6196,7 @@ doplaysound:			if (funcIndex == ACSF_PlayActorSound)
 
 		case ACSF_QuakeEx:
 		{
-			return P_StartQuakeXYZ(Level, activator, args[0], args[1], args[2], args[3], args[4], args[5], args[6], Level->Behaviors.LookupString(args[7]),
+			return P_StartQuakeXYZ(Level, activator, args[0], args[1], args[2], args[3], args[4], args[5], args[6], S_FindSound(Level->Behaviors.LookupString(args[7])),
 				argCount > 8 ? args[8] : 0,
 				argCount > 9 ? ACSToDouble(args[9]) : 1.0,
 				argCount > 10 ? ACSToDouble(args[10]) : 1.0,
@@ -6191,9 +6212,12 @@ doplaysound:			if (funcIndex == ACSF_PlayActorSound)
 			{
 				int line;
 				auto itr = Level->GetLineIdIterator(args[0]);
+				int repeat = argCount > 2? args[2] : -1;
 				while ((line = itr.Next()) >= 0)
 				{
 					Level->lines[line].activation = args[1];
+					if (repeat > 0) Level->lines[line].flags |= ML_REPEAT_SPECIAL;
+					else if (repeat == 0) Level->lines[line].flags &= ~ML_REPEAT_SPECIAL;
 				}
 			}
 			break;
@@ -6708,12 +6732,12 @@ doplaysound:			if (funcIndex == ACSF_PlayActorSound)
 				if (activator != nullptr && activator->player != nullptr)
 				{
 					int logNum = args[0];
-					FSoundID sid = 0;
+					FSoundID sid = NO_SOUND;
 
 					const char* lookup = Level->Behaviors.LookupString(args[1]);
 					if (lookup != nullptr)
 					{
-						sid = lookup;
+						sid = S_FindSound(lookup);
 					}
 
 					activator->player->SetSubtitle(logNum, sid);
@@ -8557,7 +8581,7 @@ scriptwait:
 				int capacity, offset, a, c;
 				if (CharArrayParms(capacity, offset, a, Stack, sp, pcd == PCD_PRINTMAPCHRANGE))
 				{
-					while (capacity-- && (c = activeBehavior->GetArrayVal (a, offset)) != '\0')
+					while (capacity-- && (c = activeBehavior->GetArrayVal (*activeBehavior->MapVars[a], offset)) != '\0')
 					{
 						work += (char)c;
 						offset++;
@@ -8744,7 +8768,7 @@ scriptwait:
 						(type & HUDMSG_LAYER_MASK) >> HUDMSG_LAYER_SHIFT);
 					if (type & HUDMSG_LOG)
 					{
-						int consolecolor = color >= CR_BRICK && color <= CR_YELLOW ? color + 'A' : '-';
+						int consolecolor = color >= CR_BRICK && color < NUM_TEXT_COLORS && color != CR_UNTRANSLATED ? color + 'A' : '-';
 						Printf(PRINT_NONOTIFY, "\n" TEXTCOLOR_ESCAPESTR "%c%s\n%s\n%s\n", consolecolor, console_bar, work.GetChars(), console_bar);
 					}
 				}
@@ -8847,7 +8871,7 @@ scriptwait:
 					S_Sound (
 						activationline->frontsector,
 						CHAN_AUTO, 0,	// Not CHAN_AREA, because that'd probably break existing scripts.
-						lookup,
+						S_FindSound(lookup),
 						(float)(STACK(1)) / 127.f,
 						ATTN_NORM);
 				}
@@ -9636,7 +9660,7 @@ scriptwait:
 			break;
 
 		case PCD_VECTORANGLE:
-			STACK(2) = AngleToACS(VecToAngle(STACK(2), STACK(1)).Degrees);
+			STACK(2) = AngleToACS(VecToAngle(STACK(2), STACK(1)));
 			sp--;
 			break;
 
@@ -9737,14 +9761,14 @@ scriptwait:
 			// Like Thing_Projectile(Gravity) specials, but you can give the
 			// projectile a TID.
 			// Thing_Projectile2 (tid, type, angle, speed, vspeed, gravity, newtid);
-			Level->EV_Thing_Projectile(STACK(7), activator, STACK(6), NULL, STACK(5) * (360. / 256.),
+			Level->EV_Thing_Projectile(STACK(7), activator, STACK(6), NULL, DAngle::fromDeg(STACK(5) * (360. / 256.)),
 				STACK(4) / 8., STACK(3) / 8., 0, NULL, STACK(2), STACK(1), false);
 			sp -= 7;
 			break;
 
 		case PCD_SPAWNPROJECTILE:
 			// Same, but takes an actor name instead of a spawn ID.
-			Level->EV_Thing_Projectile(STACK(7), activator, 0, Level->Behaviors.LookupString(STACK(6)), STACK(5) * (360. / 256.),
+			Level->EV_Thing_Projectile(STACK(7), activator, 0, Level->Behaviors.LookupString(STACK(6)), DAngle::fromDeg(STACK(5) * (360. / 256.)),
 				STACK(4) / 8., STACK(3) / 8., 0, NULL, STACK(2), STACK(1), false);
 			sp -= 7;
 			break;
@@ -10296,7 +10320,7 @@ DLevelScript::DLevelScript (FLevelLocals *l, AActor *who, line_t *where, int num
 	assert(code->VarCount >= code->ArgCount);
 	Localvars.Resize(code->VarCount);
 	memset(&Localvars[0], 0, code->VarCount * sizeof(int32_t));
-	for (int i = 0; i < MIN<int>(argcount, code->ArgCount); ++i)
+	for (int i = 0; i < min<int>(argcount, code->ArgCount); ++i)
 	{
 		Localvars[i] = args[i];
 	}

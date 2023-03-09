@@ -217,14 +217,20 @@ protected:
 	uint8_t mBrightmapEnabled : 1;
 
 	int mLightIndex;
+	int mBoneIndexBase;
 	int mSpecialEffect;
 	int mTextureMode;
+	int mTextureClamp;
 	int mTextureModeFlags;
 	int mSoftLight;
 	float mLightParms[4];
 
 	float mAlphaThreshold;
 	float mClipSplit[2];
+
+
+	int mColorMapSpecial;
+	float mColorMapFlash;
 
 	StreamData mStreamData = {};
 	PalEntry mFogColor;
@@ -255,6 +261,7 @@ public:
 		mFogColor = 0xffffffff;
 		mStreamData.uFogColor = mFogColor;
 		mTextureMode = -1;
+		mTextureClamp = 0;
 		mTextureModeFlags = 0;
 		mStreamData.uDesaturationFactor = 0.0f;
 		mAlphaThreshold = 0.5f;
@@ -272,11 +279,15 @@ public:
 		mLightParms[3] = -1.f;
 		mSpecialEffect = EFF_NONE;
 		mLightIndex = -1;
+		mBoneIndexBase = -1;
 		mStreamData.uInterpolationFactor = 0;
 		mRenderStyle = DefaultRenderStyle();
 		mMaterial.Reset();
 		mBias.Reset();
 		mPassType = NORMAL_PASS;
+
+		mColorMapSpecial = 0;
+		mColorMapFlash = 1;
 
 		mVertexBuffer = nullptr;
 		mVertexOffsets[0] = mVertexOffsets[1] = 0;
@@ -337,6 +348,12 @@ public:
 		mStreamData.uDesaturationFactor = 0.0f;
 	}
 
+	void SetTextureClamp(bool on)
+	{
+		if (on) mTextureClamp = TM_CLAMPY;
+		else mTextureClamp = 0;
+	}
+
 	void SetTextureMode(int mode)
 	{
 		mTextureMode = mode;
@@ -361,6 +378,14 @@ public:
 	int GetTextureMode()
 	{
 		return mTextureMode;
+	}
+
+	int GetTextureModeAndFlags(int tempTM)
+	{
+		int f = mTextureModeFlags;
+		if (!mBrightmapEnabled) f &= ~(TEXF_Brightmap | TEXF_Glowmap);
+		if (mTextureClamp) f |= TEXF_ClampY;
+		return (mTextureMode == TM_NORMAL && tempTM == TM_OPAQUE ? TM_OPAQUE : mTextureMode) | f;
 	}
 
 	void EnableTexture(bool on)
@@ -545,6 +570,11 @@ public:
 		mLightIndex = index;
 	}
 
+	void SetBoneIndexBase(int index)
+	{
+		mBoneIndexBase = index;
+	}
+
 	void SetRenderStyle(FRenderStyle rs)
 	{
 		mRenderStyle = rs;
@@ -562,7 +592,7 @@ public:
 
 	void SetDepthBias(float a, float b)
 	{
-		mBias.mChanged = mBias.mFactor != a || mBias.mUnits != b;
+		mBias.mChanged |= mBias.mFactor != a || mBias.mUnits != b;
 		mBias.mFactor = a;
 		mBias.mUnits = b;
 	}
@@ -574,7 +604,7 @@ public:
 
 	void ClearDepthBias()
 	{
-		mBias.mChanged = mBias.mFactor != 0 || mBias.mUnits != 0;
+		mBias.mChanged |= mBias.mFactor != 0 || mBias.mUnits != 0;
 		mBias.mFactor = 0;
 		mBias.mUnits = 0;
 	}
@@ -674,6 +704,12 @@ public:
 	EPassType GetPassType()
 	{
 		return mPassType;
+	}
+
+	void SetSpecialColormap(int cm, float flash)
+	{
+		mColorMapSpecial = cm;
+		mColorMapFlash = flash;
 	}
 
 	// API-dependent render interface

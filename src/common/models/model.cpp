@@ -6,7 +6,7 @@
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 2 of the License, or
 // (at your option) any later version.
 //
 // This program is distributed in the hope that it will be useful,
@@ -36,12 +36,14 @@
 #include "model_md2.h"
 #include "model_md3.h"
 #include "model_kvx.h"
+#include "model_iqm.h"
 #include "i_time.h"
 #include "voxels.h"
 #include "texturemanager.h"
 #include "modelrenderer.h"
 
 
+TArray<FString> savedModelFiles;
 TDeletingArray<FModel*> Models;
 TArray<FSpriteModelFrame> SpriteModelFrames;
 
@@ -90,15 +92,15 @@ static int FindGFXFile(FString & fn)
 	if (lump != -1) return lump;
 
 	int best = -1;
-	int dot = fn.LastIndexOf('.');
-	int slash = fn.LastIndexOf('/');
+	auto dot = fn.LastIndexOf('.');
+	auto slash = fn.LastIndexOf('/');
 	if (dot > slash) fn.Truncate(dot);
 
 	static const char * extensions[] = { ".png", ".jpg", ".tga", ".pcx", nullptr };
 
 	for (const char ** extp=extensions; *extp; extp++)
 	{
-		int lump = fileSystem.CheckNumForFullName(fn + *extp);
+		lump = fileSystem.CheckNumForFullName(fn + *extp);
 		if (lump >= best)  best = lump;
 	}
 	return best;
@@ -149,17 +151,18 @@ int ModelFrameHash(FSpriteModelFrame * smf)
 //
 //===========================================================================
 
-unsigned FindModel(const char * path, const char * modelfile)
+unsigned FindModel(const char * path, const char * modelfile, bool silent)
 {
 	FModel * model = nullptr;
 	FString fullname;
 
-	fullname.Format("%s%s", path, modelfile);
+	if (path) fullname.Format("%s%s", path, modelfile);
+	else fullname = modelfile;
 	int lump = fileSystem.CheckNumForFullName(fullname);
 
 	if (lump<0)
 	{
-		Printf("FindModel: '%s' not found\n", fullname.GetChars());
+		Printf(PRINT_HIGH, "FindModel: '%s' not found\n", fullname.GetChars());
 		return -1;
 	}
 
@@ -206,6 +209,10 @@ unsigned FindModel(const char * path, const char * modelfile)
 	{
 		model = new FMD3Model;
 	}
+	else if (!memcmp(buffer, "INTERQUAKEMODEL\0", 16))
+	{
+		model = new IQMModel;
+	}
 
 	if (model != nullptr)
 	{
@@ -225,7 +232,7 @@ unsigned FindModel(const char * path, const char * modelfile)
 		}
 		else
 		{
-			Printf("LoadModel: Unknown model format in '%s'\n", fullname.GetChars());
+			Printf(PRINT_HIGH, "LoadModel: Unknown model format in '%s'\n", fullname.GetChars());
 			return -1;
 		}
 	}

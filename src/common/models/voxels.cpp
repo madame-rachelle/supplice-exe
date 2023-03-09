@@ -74,7 +74,7 @@ static uint8_t *GetVoxelRemap(const uint8_t *pal)
 		{
 			// The voxel palette uses VGA colors, so we have to expand it
 			// from 6 to 8 bits per component.
-			remap[i] = BestColor((uint32_t *)GPalette.BaseColors,
+			remap[i] = ColorMatcher.Pick(
 				(oldpal[i*3 + 0] << 2) | (oldpal[i*3 + 0] >> 4),
 				(oldpal[i*3 + 1] << 2) | (oldpal[i*3 + 1] >> 4),
 				(oldpal[i*3 + 2] << 2) | (oldpal[i*3 + 2] >> 4));
@@ -314,10 +314,11 @@ FVoxelDef *R_LoadVoxelDef(int lumpnum, int spin)
 	else
 	{
 		FVoxelDef *voxdef = new FVoxelDef;
+		*voxdef = {};
 		voxdef->Voxel = vox;
 		voxdef->Scale = 1.;
 		voxdef->DroppedSpin = voxdef->PlacedSpin = spin;
-		voxdef->AngleOffset = 90.;
+		voxdef->AngleOffset = DAngle::fromDeg(90.);
 
 		Voxels.Push(vox);
 		VoxelDefs.Push(voxdef);

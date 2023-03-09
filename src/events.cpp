@@ -162,7 +162,7 @@ bool EventManager::UnregisterHandler(DStaticEventHandler* handler)
 
 bool EventManager::SendNetworkEvent(FString name, int arg1, int arg2, int arg3, bool manual)
 {
-	if (gamestate != GS_LEVEL)
+	if (gamestate != GS_LEVEL && gamestate != GS_TITLELEVEL)
 		return false;
 
 	Net_WriteByte(DEM_NETEVENT);
@@ -294,11 +294,11 @@ void EventManager::WorldLoaded()
 	}
 }
 
-void EventManager::WorldUnloaded()
+void EventManager::WorldUnloaded(const FString& nextmap)
 {
 	for (DStaticEventHandler* handler = LastEventHandler; handler; handler = handler->prev)
 	{
-		handler->WorldUnloaded();
+		handler->WorldUnloaded(nextmap);
 	}
 }
 
@@ -516,12 +516,12 @@ bool EventManager::Responder(const event_t* ev)
 	return false;
 }
 
-void EventManager::Console(int player, FString name, int arg1, int arg2, int arg3, bool manual)
+void EventManager::Console(int player, FString name, int arg1, int arg2, int arg3, bool manual, bool ui)
 {
-	if (ShouldCallStatic(false)) staticEventManager.Console(player, name, arg1, arg2, arg3, manual);
+	if (ShouldCallStatic(false)) staticEventManager.Console(player, name, arg1, arg2, arg3, manual, ui);
 
 	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		handler->ConsoleProcess(player, name, arg1, arg2, arg3, manual);
+		handler->ConsoleProcess(player, name, arg1, arg2, arg3, manual, ui);
 }
 
 void EventManager::RenderOverlay(EHudState state)
@@ -629,6 +629,7 @@ DEFINE_FIELD_X(RenderEvent, FRenderEvent, Camera);
 
 DEFINE_FIELD_X(WorldEvent, FWorldEvent, IsSaveGame);
 DEFINE_FIELD_X(WorldEvent, FWorldEvent, IsReopen);
+DEFINE_FIELD_X(WorldEvent, FWorldEvent, NextMap);
 DEFINE_FIELD_X(WorldEvent, FWorldEvent, Thing);
 DEFINE_FIELD_X(WorldEvent, FWorldEvent, Inflictor);
 DEFINE_FIELD_X(WorldEvent, FWorldEvent, Damage);
@@ -683,6 +684,21 @@ DEFINE_ACTION_FUNCTION(DEventHandler, SendNetworkEvent)
 	//
 
 	ACTION_RETURN_BOOL(currentVMLevel->localEventManager->SendNetworkEvent(name, arg1, arg2, arg3, false));
+}
+
+DEFINE_ACTION_FUNCTION(DEventHandler, SendInterfaceEvent)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(playerNum);
+	PARAM_STRING(name);
+	PARAM_INT(arg1);
+	PARAM_INT(arg2);
+	PARAM_INT(arg3);
+
+	if (playerNum == consoleplayer)
+		primaryLevel->localEventManager->Console(-1, name, arg1, arg2, arg3, false, true);
+
+	return 0;
 }
 
 DEFINE_ACTION_FUNCTION(DEventHandler, Find)
@@ -753,7 +769,7 @@ FWorldEvent EventManager::SetupWorldEvent()
 	FWorldEvent e;
 	e.IsSaveGame = savegamerestore;
 	e.IsReopen = Level->FromSnapshot && !savegamerestore; // each one by itself isnt helpful, but with hub load we have savegamerestore==0 and level.FromSnapshot==1.
-	e.DamageAngle = 0.0;
+	e.DamageAngle = nullAngle;
 	return e;
 }
 
@@ -769,13 +785,14 @@ void DStaticEventHandler::WorldLoaded()
 	}
 }
 
-void DStaticEventHandler::WorldUnloaded()
+void DStaticEventHandler::WorldUnloaded(const FString& nextmap)
 {
 	IFVIRTUAL(DStaticEventHandler, WorldUnloaded)
 	{
 		// don't create excessive DObjects if not going to be processed anyway
 		if (isEmpty(func)) return;
 		FWorldEvent e = owner->SetupWorldEvent();
+		e.NextMap = nextmap;
 		VMValue params[2] = { (DStaticEventHandler*)this, &e };
 		VMCall(func, params, 2, nullptr, 0);
 	}
@@ -1141,26 +1158,49 @@ void DStaticEventHandler::PostUiTick()
 	}
 }
 
-void DStaticEventHandler::ConsoleProcess(int player, FString name, int arg1, int arg2, int arg3, bool manual)
+void DStaticEventHandler::ConsoleProcess(int player, FString name, int arg1, int arg2, int arg3, bool manual, bool ui)
 {
 	if (player < 0)
 	{
-		IFVIRTUAL(DStaticEventHandler, ConsoleProcess)
+		if (ui)
 		{
-			// don't create excessive DObjects if not going to be processed anyway
-			if (isEmpty(func)) return;
-			FConsoleEvent e;
+			IFVIRTUAL(DStaticEventHandler, InterfaceProcess)
+			{
+				// don't create excessive DObjects if not going to be processed anyway
+				if (isEmpty(func)) return;
+				FConsoleEvent e;
 
-			//
-			e.Player = player;
-			e.Name = name;
-			e.Args[0] = arg1;
-			e.Args[1] = arg2;
-			e.Args[2] = arg3;
-			e.IsManual = manual;
+				//
+				e.Player = player;
+				e.Name = name;
+				e.Args[0] = arg1;
+				e.Args[1] = arg2;
+				e.Args[2] = arg3;
+				e.IsManual = manual;
 
-			VMValue params[2] = { (DStaticEventHandler*)this, &e };
-			VMCall(func, params, 2, nullptr, 0);
+				VMValue params[2] = { (DStaticEventHandler*)this, &e };
+				VMCall(func, params, 2, nullptr, 0);
+			}
+		}
+		else
+		{
+			IFVIRTUAL(DStaticEventHandler, ConsoleProcess)
+			{
+				// don't create excessive DObjects if not going to be processed anyway
+				if (isEmpty(func)) return;
+				FConsoleEvent e;
+
+				//
+				e.Player = player;
+				e.Name = name;
+				e.Args[0] = arg1;
+				e.Args[1] = arg2;
+				e.Args[2] = arg3;
+				e.IsManual = manual;
+
+				VMValue params[2] = { (DStaticEventHandler*)this, &e };
+				VMCall(func, params, 2, nullptr, 0);
+			}
 		}
 	}
 	else
@@ -1236,6 +1276,25 @@ void DStaticEventHandler::OnDestroy()
 
 // console stuff
 // this is kinda like puke, except it distinguishes between local events and playsim events.
+CCMD(interfaceevent)
+{
+	int argc = argv.argc();
+
+	if (argc < 2 || argc > 5)
+	{
+		Printf("Usage: interfaceevent <name> [arg1] [arg2] [arg3]\n");
+	}
+	else
+	{
+		int arg[3] = { 0, 0, 0 };
+		int argn = min<int>(argc - 2, countof(arg));
+		for (int i = 0; i < argn; i++)
+			arg[i] = atoi(argv[2 + i]);
+		// call locally
+		primaryLevel->localEventManager->Console(-1, argv[1], arg[0], arg[1], arg[2], true, true);
+	}
+}
+
 CCMD(event)
 {
 	int argc = argv.argc();
@@ -1247,11 +1306,11 @@ CCMD(event)
 	else
 	{
 		int arg[3] = { 0, 0, 0 };
-		int argn = MIN<int>(argc - 2, countof(arg));
+		int argn = min<int>(argc - 2, countof(arg));
 		for (int i = 0; i < argn; i++)
 			arg[i] = atoi(argv[2 + i]);
 		// call locally
-		primaryLevel->localEventManager->Console(-1, argv[1], arg[0], arg[1], arg[2], true);
+		primaryLevel->localEventManager->Console(-1, argv[1], arg[0], arg[1], arg[2], true, false);
 	}
 }
 
@@ -1272,7 +1331,7 @@ CCMD(netevent)
 	else
 	{
 		int arg[3] = { 0, 0, 0 };
-		int argn = MIN<int>(argc - 2, countof(arg));
+		int argn = min<int>(argc - 2, countof(arg));
 		for (int i = 0; i < argn; i++)
 			arg[i] = atoi(argv[2 + i]);
 		// call networked

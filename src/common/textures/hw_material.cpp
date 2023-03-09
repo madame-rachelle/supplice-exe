@@ -6,7 +6,7 @@
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 2 of the License, or
 // (at your option) any later version.
 //
 // This program is distributed in the hope that it will be useful,
@@ -28,6 +28,10 @@
 #include "texturemanager.h"
 #include "c_cvars.h"
 #include "v_video.h"
+
+
+CVAR(Bool, gl_customshader, true, 0);
+
 
 static IHardwareTexture* (*layercallback)(int layer, int translation);
 TArray<UserShaderDesc> usershaders;
@@ -124,17 +128,20 @@ FMaterial::FMaterial(FGameTexture * tx, int scaleflags)
 		}
 
 		auto index = tx->GetShaderIndex();
-		if (index >= FIRST_USER_SHADER)
+		if (gl_customshader)
 		{
-			const UserShaderDesc &usershader = usershaders[index - FIRST_USER_SHADER];
-			if (usershader.shaderType == mShaderIndex) // Only apply user shader if it matches the expected material
+			if (index >= FIRST_USER_SHADER)
 			{
-				for (auto &texture : tx->CustomShaderTextures)
+				const UserShaderDesc& usershader = usershaders[index - FIRST_USER_SHADER];
+				if (usershader.shaderType == mShaderIndex) // Only apply user shader if it matches the expected material
 				{
-					if (texture == nullptr) continue;
-					mTextureLayers.Push({ texture.get(), 0 });	// scalability should be user-definable.
+					for (auto& texture : tx->CustomShaderTextures)
+					{
+						if (texture == nullptr) continue;
+						mTextureLayers.Push({ texture.get(), 0 });	// scalability should be user-definable.
+					}
+					mShaderIndex = index;
 				}
-				mShaderIndex = index;
 			}
 		}
 	}

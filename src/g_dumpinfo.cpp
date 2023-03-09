@@ -44,6 +44,7 @@
 #include "c_functions.h"
 #include "gstrings.h"
 #include "texturemanager.h"
+#include "d_main.h"
 
 //==========================================================================
 //
@@ -74,7 +75,7 @@ CCMD(listlights)
 			
 			if (dl->target)
 			{
-				FTextureID spr = sprites[dl->target->sprite].GetSpriteFrame(dl->target->frame, 0, 0., nullptr);
+				FTextureID spr = sprites[dl->target->sprite].GetSpriteFrame(dl->target->frame, 0, nullAngle, nullptr);
 				Printf(", frame = %s ", TexMan.GetGameTexture(spr)->GetName().GetChars());
 			}
 			
@@ -390,7 +391,7 @@ CCMD(skyfog)
 	if (argv.argc() > 1)
 	{
 		// Do this only on the primary level.
-		primaryLevel->skyfog = MAX(0, (int)strtoull(argv[1], NULL, 0));
+		primaryLevel->skyfog = max(0, (int)strtoull(argv[1], NULL, 0));
 	}
 }
 

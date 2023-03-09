@@ -325,6 +325,10 @@ void HandleDeprecatedFlags(AActor *defaults, PClassActor *info, bool set, int in
 		defaults->IntVar(NAME_InterHubAmount) = set ? 0 : 1;
 		break;
 
+	case DEPF_HIGHERMPROB:
+		defaults->MinMissileChance = set ? 160 : 200;
+		break;
+
 	default:
 		break;	// silence GCC
 	}
@@ -384,6 +388,9 @@ bool CheckDeprecatedFlags(AActor *actor, PClassActor *info, int index)
 
 	case DEPF_INTERHUBSTRIP:
 		return !(actor->IntVar(NAME_InterHubAmount));
+
+	case DEPF_HIGHERMPROB:
+		return actor->MinMissileChance <= 160;
 	}
 
 	return false; // Any entirely unknown flag is not set
@@ -521,7 +528,9 @@ DEFINE_PROPERTY(skip_super, 0, Actor)
 		return;
 	}
 
-	*defaults = *GetDefault<AActor>();
+	// major hack job alert. This is only supposed to copy the parts that actually are defined by AActor itself.
+	memcpy(&defaults->snext, &GetDefault<AActor>()->snext, (uint8_t*)&defaults[1] - (uint8_t*)&defaults->snext);
+
 	ResetBaggage (&bag, RUNTIME_CLASS(AActor));
 	static_cast<PClassActor*>(bag.Info)->ActorInfo()->SkipSuperSet = true;	// ZScript processes the states later so this property must be flagged for later handling.
 }
@@ -611,7 +620,7 @@ DEFINE_PROPERTY(damage, X, Actor)
 DEFINE_PROPERTY(scale, F, Actor)
 {
 	PROP_DOUBLE_PARM(id, 0);
-	defaults->Scale.X = defaults->Scale.Y = id;
+	defaults->Scale.X = defaults->Scale.Y = float(id);
 }
 
 //==========================================================================
@@ -952,7 +961,7 @@ DEFINE_PROPERTY(gravity, F, Actor)
 DEFINE_PROPERTY(spriteangle, F, Actor)
 {
 	PROP_DOUBLE_PARM(i, 0);
-	defaults->SpriteAngle = i;
+	defaults->SpriteAngle = DAngle::fromDeg(i);
 }
 
 //==========================================================================
@@ -1023,6 +1032,45 @@ DEFINE_PROPERTY(designatedteam, I, Actor)
 	if(val < 0 || (val >= (signed) Teams.Size() && val != TEAM_NONE))
 		I_Error("Invalid team designation.\n");
 	defaults->DesignatedTeam = val;
+}
+
+//==========================================================================
+// MBF21
+//==========================================================================
+DEFINE_PROPERTY(infightinggroup, I, Actor)
+{
+	PROP_INT_PARM(i, 0);
+	if (i < 0)
+	{
+		I_Error("Infighting groups must be >= 0.");
+	}
+	info->ActorInfo()->infighting_group = i;
+}
+
+//==========================================================================
+// MBF21
+//==========================================================================
+DEFINE_PROPERTY(projectilegroup, I, Actor)
+{
+	PROP_INT_PARM(i, 0);
+	if (i < -1)
+	{
+		I_Error("Projectile groups must be >= -1.");
+	}
+	info->ActorInfo()->projectile_group = i;
+}
+
+//==========================================================================
+// MBF21
+//==========================================================================
+DEFINE_PROPERTY(splashgroup, I, Actor)
+{
+	PROP_INT_PARM(i, 0);
+	if (i < 0)
+	{
+		I_Error("Splash groups must be >= 0.");
+	}
+	info->ActorInfo()->splash_group = i;
 }
 
 //==========================================================================
@@ -1245,7 +1293,7 @@ DEFINE_CLASS_PROPERTY_PREFIX(powerup, color, C_f, Inventory)
 			*pBlendColor = MakeSpecialColormap(65535);
 			return;
 		}
-		color = V_GetColor(NULL, name, &bag.ScriptPosition);
+		color = V_GetColor(name, &bag.ScriptPosition);
 	}
 	if (PROP_PARM_COUNT > 2)
 	{

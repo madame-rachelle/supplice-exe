@@ -33,7 +33,7 @@
 */
 
 #include <stdarg.h>
-#include "templates.h"
+
 #include "v_2ddrawer.h"
 #include "vectors.h"
 #include "vm.h"
@@ -41,13 +41,16 @@
 #include "v_draw.h"
 #include "v_video.h"
 #include "fcolormap.h"
+#include "texturemanager.h"
 
-static F2DDrawer drawer;
+static F2DDrawer drawer = F2DDrawer();
 F2DDrawer* twod = &drawer;
 
 EXTERN_CVAR(Float, transsouls)
 CVAR(Float, classic_scaling_factor, 1.0, CVAR_ARCHIVE)
 CVAR(Float, classic_scaling_pixelaspect, 1.2f, CVAR_ARCHIVE)
+
+IMPLEMENT_CLASS(FCanvas, false, false)
 
 IMPLEMENT_CLASS(DShape2DTransform, false, false)
 
@@ -104,17 +107,44 @@ DEFINE_ACTION_FUNCTION_NATIVE(DShape2DTransform, Translate, Shape2DTransform_Tra
 	return 0;
 }
 
+static void Shape2DTransform_From2D(
+	DShape2DTransform* self,
+	double m00, double m01, double m10, double m11, double vx, double vy
+)
+{
+	self->transform.Cells[0][0] = m00;
+	self->transform.Cells[0][1] = m01;
+	self->transform.Cells[1][0] = m10;
+	self->transform.Cells[1][1] = m11;
+
+	self->transform.Cells[0][2] = vx;
+	self->transform.Cells[1][2] = vy;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DShape2DTransform, From2D, Shape2DTransform_From2D)
+{
+	PARAM_SELF_PROLOGUE(DShape2DTransform);
+	PARAM_FLOAT(m00);
+	PARAM_FLOAT(m01);
+	PARAM_FLOAT(m10);
+	PARAM_FLOAT(m11);
+	PARAM_FLOAT(vx);
+	PARAM_FLOAT(vy);
+	Shape2DTransform_From2D(self, m00, m01, m10, m11, vx, vy);
+	return 0;
+}
+
 IMPLEMENT_CLASS(DShape2D, false, false)
 
 static void Shape2D_SetTransform(DShape2D* self, DShape2DTransform *transform)
 {
-	self->transform = transform->transform;
+	self->transform = PARAM_NULLCHECK(transform, transform)->transform;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DShape2D, SetTransform, Shape2D_SetTransform)
 {
 	PARAM_SELF_PROLOGUE(DShape2D);
-	PARAM_OBJECT(transform, DShape2DTransform);
+	PARAM_OBJECT_NOT_NULL(transform, DShape2DTransform);
 	Shape2D_SetTransform(self, transform);
 	return 0;
 }
@@ -124,7 +154,7 @@ static void Shape2D_Clear(DShape2D* self, int which)
 	if (which & C_Verts) self->mVertices.Clear();
 	if (which & C_Coords) self->mCoords.Clear();
 	if (which & C_Indices) self->mIndices.Clear();
-	self->needsVertexUpload = true;
+	self->bufferInfo->needsVertexUpload = true;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DShape2D, Clear, Shape2D_Clear)
@@ -138,7 +168,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(DShape2D, Clear, Shape2D_Clear)
 static void Shape2D_PushVertex(DShape2D* self, double x, double y)
 {
 	self->mVertices.Push(DVector2(x, y));
-	self->needsVertexUpload = true;
+	self->bufferInfo->needsVertexUpload = true;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DShape2D, PushVertex, Shape2D_PushVertex)
@@ -153,7 +183,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(DShape2D, PushVertex, Shape2D_PushVertex)
 static void Shape2D_PushCoord(DShape2D* self, double u, double v)
 {
 	self->mCoords.Push(DVector2(u, v));
-	self->needsVertexUpload = true;
+	self->bufferInfo->needsVertexUpload = true;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DShape2D, PushCoord, Shape2D_PushCoord)
@@ -170,7 +200,7 @@ static void Shape2D_PushTriangle(DShape2D* self, int a, int b, int c)
 	self->mIndices.Push(a);
 	self->mIndices.Push(b);
 	self->mIndices.Push(c);
-	self->needsVertexUpload = true;
+	self->bufferInfo->needsVertexUpload = true;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DShape2D, PushTriangle, Shape2D_PushTriangle)
@@ -455,15 +485,26 @@ void F2DDrawer::AddTexture(FGameTexture* img, DrawParms& parms)
 		// Note that this only works for unflipped and unrotated full textures.
 		if (parms.windowleft > 0 || parms.windowright < parms.texwidth)
 		{
-			double wi = std::min(parms.windowright, parms.texwidth);
+			double wi = min(parms.windowright, parms.texwidth);
 			x += parms.windowleft * xscale;
 			w -= (parms.texwidth - wi + parms.windowleft) * xscale;
 
 			u1 = float(u1 + parms.windowleft / parms.texwidth);
 			u2 = float(u2 - (parms.texwidth - wi) / parms.texwidth);
 		}
+		auto t = this->transform;
+		auto tCorners = {
+			(t * DVector3(x,     y,     1.0)).XY(),
+			(t * DVector3(x,     y + h, 1.0)).XY(),
+			(t * DVector3(x + w, y,     1.0)).XY(),
+			(t * DVector3(x + w, y + h, 1.0)).XY()
+		};
+		double minx = std::min_element(tCorners.begin(), tCorners.end(), [] (auto d0, auto d1) { return d0.X < d1.X; })->X;
+		double maxx = std::max_element(tCorners.begin(), tCorners.end(), [] (auto d0, auto d1) { return d0.X < d1.X; })->X;
+		double miny = std::min_element(tCorners.begin(), tCorners.end(), [] (auto d0, auto d1) { return d0.Y < d1.Y; })->Y;
+		double maxy = std::max_element(tCorners.begin(), tCorners.end(), [] (auto d0, auto d1) { return d0.Y < d1.Y; })->Y;
 
-		if (x < (double)parms.lclip || y < (double)parms.uclip || x + w >(double)parms.rclip || y + h >(double)parms.dclip)
+		if (minx < (double)parms.lclip || miny < (double)parms.uclip || maxx >(double)parms.rclip || maxy >(double)parms.dclip)
 		{
 			dg.mScissor[0] = parms.lclip + int(offset.X);
 			dg.mScissor[1] = parms.uclip + int(offset.Y);
@@ -479,10 +520,10 @@ void F2DDrawer::AddTexture(FGameTexture* img, DrawParms& parms)
 		dg.mVertCount = 4;
 		dg.mVertIndex = (int)mVertices.Reserve(4);
 		TwoDVertex* ptr = &mVertices[dg.mVertIndex];
-		Set(ptr, x, y, 0, u1, v1, vertexcolor); ptr++;
-		Set(ptr, x, y + h, 0, u1, v2, vertexcolor); ptr++;
-		Set(ptr, x + w, y, 0, u2, v1, vertexcolor); ptr++;
-		Set(ptr, x + w, y + h, 0, u2, v2, vertexcolor); ptr++;
+		ptr->Set(x, y, 0, u1, v1, vertexcolor); ptr++;
+		ptr->Set(x, y + h, 0, u1, v2, vertexcolor); ptr++;
+		ptr->Set(x + w, y, 0, u2, v1, vertexcolor); ptr++;
+		ptr->Set(x + w, y + h, 0, u2, v2, vertexcolor); ptr++;
 	}
 	else
 	{
@@ -515,12 +556,16 @@ void F2DDrawer::AddTexture(FGameTexture* img, DrawParms& parms)
 		dg.mVertCount = 4;
 		dg.mVertIndex = (int)mVertices.Reserve(4);
 		TwoDVertex* ptr = &mVertices[dg.mVertIndex];
-		Set(ptr, x1, y1, 0, u1, v1, vertexcolor); ptr++;
-		Set(ptr, x2, y2, 0, u1, v2, vertexcolor); ptr++;
-		Set(ptr, x3, y3, 0, u2, v1, vertexcolor); ptr++;
-		Set(ptr, x4, y4, 0, u2, v2, vertexcolor); ptr++;
+		ptr->Set(x1, y1, 0, u1, v1, vertexcolor); ptr++;
+		ptr->Set(x2, y2, 0, u1, v2, vertexcolor); ptr++;
+		ptr->Set(x3, y3, 0, u2, v1, vertexcolor); ptr++;
+		ptr->Set(x4, y4, 0, u2, v2, vertexcolor); ptr++;
 
 	}
+	dg.useTransform = true;
+	dg.transform = this->transform;
+	dg.transform.Cells[0][2] += offset.X;
+	dg.transform.Cells[1][2] += offset.Y;
 	dg.mIndexIndex = mIndices.Size();
 	dg.mIndexCount += 6;
 	AddIndices(dg.mVertIndex, 6, 0, 1, 2, 1, 3, 2);
@@ -528,13 +573,15 @@ void F2DDrawer::AddTexture(FGameTexture* img, DrawParms& parms)
 	offset = osave;
 }
 
+static TArray<RefCountedPtr<DShape2DBufferInfo>> buffersToDestroy;
+
 void DShape2D::OnDestroy() {
 	if (lastParms) delete lastParms;
 	lastParms = nullptr;
 	mIndices.Reset();
 	mVertices.Reset();
 	mCoords.Reset();
-	buffers.Reset();
+	buffersToDestroy.Push(std::move(bufferInfo));
 }
 
 //==========================================================================
@@ -567,23 +614,23 @@ void F2DDrawer::AddShape(FGameTexture* img, DShape2D* shape, DrawParms& parms)
 		shape->lastParms = new DrawParms(parms);
 	}
 	else if (shape->lastParms->vertexColorChange(parms)) {
-		shape->needsVertexUpload = true;
-		if (!shape->uploadedOnce) {
-			shape->bufIndex = -1;
-			shape->buffers.Clear();
-			shape->lastCommand = -1;
+		shape->bufferInfo->needsVertexUpload = true;
+		if (!shape->bufferInfo->uploadedOnce) {
+			shape->bufferInfo->bufIndex = -1;
+			shape->bufferInfo->buffers.Clear();
+			shape->bufferInfo->lastCommand = -1;
 		}
 		delete shape->lastParms;
 		shape->lastParms = new DrawParms(parms);
 	}
 
-	if (!img->isHardwareCanvas() && parms.TranslationId != -1)
+	if (!(img != nullptr && img->isHardwareCanvas()) && parms.TranslationId != -1)
 		dg.mTranslationId = parms.TranslationId;
 
 	auto osave = offset;
 	if (parms.nooffset) offset = { 0,0 };
 
-	if (shape->needsVertexUpload)
+	if (shape->bufferInfo->needsVertexUpload)
 	{
 		shape->minx = 16383;
 		shape->miny = 16383;
@@ -597,11 +644,12 @@ void F2DDrawer::AddShape(FGameTexture* img, DShape2D* shape, DrawParms& parms)
 			if ( shape->mVertices[i].Y > shape->maxy ) shape->maxy = shape->mVertices[i].Y;
 		}
 	}
+	auto t = this->transform * shape->transform;
 	auto tCorners = {
-		(shape->transform * DVector3(shape->minx, shape->miny, 1.0)).XY(),
-		(shape->transform * DVector3(shape->minx, shape->maxy, 1.0)).XY(),
-		(shape->transform * DVector3(shape->maxx, shape->miny, 1.0)).XY(),
-		(shape->transform * DVector3(shape->maxx, shape->maxy, 1.0)).XY()
+		(t * DVector3(shape->minx, shape->miny, 1.0)).XY(),
+		(t * DVector3(shape->minx, shape->maxy, 1.0)).XY(),
+		(t * DVector3(shape->maxx, shape->miny, 1.0)).XY(),
+		(t * DVector3(shape->maxx, shape->maxy, 1.0)).XY()
 	};
 	double minx = std::min_element(tCorners.begin(), tCorners.end(), [] (auto d0, auto d1) { return d0.X < d1.X; })->X;
 	double maxx = std::max_element(tCorners.begin(), tCorners.end(), [] (auto d0, auto d1) { return d0.X < d1.X; })->X;
@@ -619,18 +667,18 @@ void F2DDrawer::AddShape(FGameTexture* img, DShape2D* shape, DrawParms& parms)
 		memset(dg.mScissor, 0, sizeof(dg.mScissor));
 
 	dg.useTransform = true;
-	dg.transform = shape->transform;
+	dg.transform = t;
 	dg.transform.Cells[0][2] += offset.X;
 	dg.transform.Cells[1][2] += offset.Y;
-	dg.shape2D = shape;
+	dg.shape2DBufInfo = shape->bufferInfo;
 	dg.shape2DIndexCount = shape->mIndices.Size();
-	if (shape->needsVertexUpload)
+	if (shape->bufferInfo->needsVertexUpload)
 	{
-		shape->bufIndex += 1;
+		shape->bufferInfo->bufIndex += 1;
 
-		shape->buffers.Reserve(1);
+		shape->bufferInfo->buffers.Reserve(1);
 
-		auto buf = &shape->buffers[shape->bufIndex];
+		auto buf = &shape->bufferInfo->buffers[shape->bufferInfo->bufIndex];
 
 		auto verts = TArray<TwoDVertex>(dg.mVertCount, true);
 		for ( int i=0; i<dg.mVertCount; i++ )
@@ -649,12 +697,12 @@ void F2DDrawer::AddShape(FGameTexture* img, DShape2D* shape, DrawParms& parms)
 		}
 
 		buf->UploadData(&verts[0], dg.mVertCount, &shape->mIndices[0], shape->mIndices.Size());
-		shape->needsVertexUpload = false;
-		shape->uploadedOnce = true;
+		shape->bufferInfo->needsVertexUpload = false;
+		shape->bufferInfo->uploadedOnce = true;
 	}
-	dg.shape2DBufIndex = shape->bufIndex;
-	shape->lastCommand += 1;
-	dg.shape2DCommandCounter = shape->lastCommand;
+	dg.shape2DBufIndex = shape->bufferInfo->bufIndex;
+	shape->bufferInfo->lastCommand += 1;
+	dg.shape2DCommandCounter = shape->bufferInfo->lastCommand;
 	AddCommand(&dg);
 	offset = osave;
 }
@@ -691,7 +739,7 @@ void F2DDrawer::AddPoly(FGameTexture *texture, FVector2 *points, int npoints,
 	poly.mColor1.g = uint8_t(colormap.FadeColor.g * fadelevel);
 	poly.mColor1.b = uint8_t(colormap.FadeColor.b * fadelevel);
 
-	bool dorotate = rotation != 0;
+	bool dorotate = rotation != nullAngle;
 
 	float cosrot = (float)cos(rotation.Radians());
 	float sinrot = (float)sin(rotation.Radians());
@@ -713,7 +761,7 @@ void F2DDrawer::AddPoly(FGameTexture *texture, FVector2 *points, int npoints,
 			u = t * cosrot - v * sinrot;
 			v = v * cosrot + t * sinrot;
 		}
-		Set(&mVertices[poly.mVertIndex+i], points[i].X, points[i].Y, 0, u*uscale, v*vscale, color0);
+		mVertices[poly.mVertIndex+i].Set(points[i].X, points[i].Y, 0, u*uscale, v*vscale, color0);
 	}
 	poly.mIndexIndex = mIndices.Size();
 
@@ -734,6 +782,10 @@ void F2DDrawer::AddPoly(FGameTexture *texture, FVector2 *points, int npoints,
 			mIndices[addr + i] = poly.mVertIndex + indices[i];
 		}
 	}
+	poly.useTransform = true;
+	poly.transform = this->transform;
+	poly.transform.Cells[0][2] += offset.X;
+	poly.transform.Cells[1][2] += offset.Y;
 
 	AddCommand(&poly);
 }
@@ -744,20 +796,19 @@ void F2DDrawer::AddPoly(FGameTexture *texture, FVector2 *points, int npoints,
 //
 //==========================================================================
 
-void F2DDrawer::AddPoly(FGameTexture* img, FVector4* vt, size_t vtcount, const unsigned int* ind, size_t idxcount, int translation, PalEntry color, FRenderStyle style, int clipx1, int clipy1, int clipx2, int clipy2)
+void F2DDrawer::AddPoly(FGameTexture* img, FVector4* vt, size_t vtcount, const unsigned int* ind, size_t idxcount, int translation, PalEntry color, FRenderStyle style, const IntRect* clip)
 {
 	RenderCommand dg;
-	int method = 0;
 
 	if (!img || !img->isValid()) return;
 
 	dg.mType = DrawTypeTriangles;
-	if (clipx1 > 0 || clipy1 > 0 || clipx2 < GetWidth() - 1 || clipy2 < GetHeight() - 1)
+	if (clip != nullptr)
 	{
-		dg.mScissor[0] = clipx1     + int(offset.X);
-		dg.mScissor[1] = clipy1     + int(offset.Y);
-		dg.mScissor[2] = clipx2 + 1 + int(offset.X);
-		dg.mScissor[3] = clipy2 + 1 + int(offset.Y);
+		dg.mScissor[0] = clip->Left() + int(offset.X);
+		dg.mScissor[1] = clip->Top() + int(offset.Y);
+		dg.mScissor[2] = clip->Right() + int(offset.X);
+		dg.mScissor[3] = clip->Bottom() + int(offset.Y);
 		dg.mFlags |= DTF_Scissor;
 	}
 
@@ -772,7 +823,7 @@ void F2DDrawer::AddPoly(FGameTexture* img, FVector4* vt, size_t vtcount, const u
 
 	for (size_t i=0;i<vtcount;i++)
 	{
-		Set(ptr, vt[i].X, vt[i].Y, 0.f, vt[i].Z, vt[i].W, color);
+		ptr->Set(vt[i].X, vt[i].Y, 0.f, vt[i].Z, vt[i].W, color);
 		ptr++;
 	}
 	dg.mIndexIndex = mIndices.Size();
@@ -797,6 +848,10 @@ void F2DDrawer::AddPoly(FGameTexture* img, FVector4* vt, size_t vtcount, const u
 		dg.mIndexCount = (int)vtcount;
 
 	}
+	dg.useTransform = true;
+	dg.transform = this->transform;
+	dg.transform.Cells[0][2] += offset.X;
+	dg.transform.Cells[1][2] += offset.Y;
 	AddCommand(&dg);
 }
 
@@ -833,13 +888,13 @@ void F2DDrawer::AddFlatFill(int left, int top, int right, int bottom, FGameTextu
 	dg.mFlags = DTF_Wrap;
 
 	float fs = 1.f / float(flatscale);
-	bool flipc = false;
 
 	float sw = GetClassicFlatScalarWidth();
 	float sh = GetClassicFlatScalarHeight();
 
 	switch (local_origin)
 	{
+	default:
 	case 0:
 		fU1 = float(left) / (float)src->GetDisplayWidth() * fs;
 		fV1 = float(top) / (float)src->GetDisplayHeight() * fs;
@@ -915,18 +970,22 @@ void F2DDrawer::AddFlatFill(int left, int top, int right, int bottom, FGameTextu
 	dg.mVertIndex = (int)mVertices.Reserve(4);
 	auto ptr = &mVertices[dg.mVertIndex];
 
-	Set(ptr, left, top, 0, fU1, fV1, color); ptr++;
+	ptr->Set(left, top, 0, fU1, fV1, color); ptr++;
 	if (local_origin < 4)
 	{
-		Set(ptr, left, bottom, 0, fU1, fV2, color); ptr++;
-		Set(ptr, right, top, 0, fU2, fV1, color); ptr++;
+		ptr->Set(left, bottom, 0, fU1, fV2, color); ptr++;
+		ptr->Set(right, top, 0, fU2, fV1, color); ptr++;
 	}
 	else
 	{
-		Set(ptr, left, bottom, 0, fU2, fV1, color); ptr++;
-		Set(ptr, right, top, 0, fU1, fV2, color); ptr++;
+		ptr->Set(left, bottom, 0, fU2, fV1, color); ptr++;
+		ptr->Set(right, top, 0, fU1, fV2, color); ptr++;
 	}
-	Set(ptr, right, bottom, 0, fU2, fV2, color); ptr++;
+	ptr->Set(right, bottom, 0, fU2, fV2, color); ptr++;
+	dg.useTransform = true;
+	dg.transform = this->transform;
+	dg.transform.Cells[0][2] += offset.X;
+	dg.transform.Cells[1][2] += offset.Y;
 	dg.mIndexIndex = mIndices.Size();
 	dg.mIndexCount += 6;
 	AddIndices(dg.mVertIndex, 6, 0, 1, 2, 1, 3, 2);
@@ -949,10 +1008,14 @@ void F2DDrawer::AddColorOnlyQuad(int x1, int y1, int w, int h, PalEntry color, F
 	dg.mVertIndex = (int)mVertices.Reserve(4);
 	dg.mRenderStyle = style? *style : LegacyRenderStyles[STYLE_Translucent];
 	auto ptr = &mVertices[dg.mVertIndex];
-	Set(ptr, x1, y1, 0, 0, 0, color); ptr++;
-	Set(ptr, x1, y1 + h, 0, 0, 0, color); ptr++;
-	Set(ptr, x1 + w, y1, 0, 0, 0, color); ptr++;
-	Set(ptr, x1 + w, y1 + h, 0, 0, 0, color); ptr++;
+	ptr->Set(x1, y1, 0, 0, 0, color); ptr++;
+	ptr->Set(x1, y1 + h, 0, 0, 0, color); ptr++;
+	ptr->Set(x1 + w, y1, 0, 0, 0, color); ptr++;
+	ptr->Set(x1 + w, y1 + h, 0, 0, 0, color); ptr++;
+	dg.useTransform = true;
+	dg.transform = this->transform;
+	dg.transform.Cells[0][2] += offset.X;
+	dg.transform.Cells[1][2] += offset.Y;
 	dg.mIndexIndex = mIndices.Size();
 	dg.mIndexCount += 6;
 	AddIndices(dg.mVertIndex, 6, 0, 1, 2, 1, 3, 2);
@@ -977,28 +1040,32 @@ void F2DDrawer::ClearScreen(PalEntry color)
 //
 //==========================================================================
 
-void F2DDrawer::AddLine(double x1, double y1, double x2, double y2, int clipx1, int clipy1, int clipx2, int clipy2, uint32_t color, uint8_t alpha)
+void F2DDrawer::AddLine(const DVector2& v1, const DVector2& v2, const IntRect* clip, uint32_t color, uint8_t alpha)
 {
 	PalEntry p = (PalEntry)color;
 	p.a = alpha;
 
 	RenderCommand dg;
 
-	if (clipx1 > 0 || clipy1 > 0 || clipx2 < GetWidth()- 1 || clipy2 < GetHeight() - 1)
+	if (clip != nullptr)
 	{
-		dg.mScissor[0] = clipx1     + int(offset.X);
-		dg.mScissor[1] = clipy1     + int(offset.Y);
-		dg.mScissor[2] = clipx2 + 1 + int(offset.X);
-		dg.mScissor[3] = clipy2 + 1 + int(offset.Y);
+		dg.mScissor[0] = clip->Left() + int(offset.X);
+		dg.mScissor[1] = clip->Top() + int(offset.Y);
+		dg.mScissor[2] = clip->Right() + int(offset.X);
+		dg.mScissor[3] = clip->Bottom() + int(offset.Y);
 		dg.mFlags |= DTF_Scissor;
 	}
-	
+
 	dg.mType = DrawTypeLines;
 	dg.mRenderStyle = LegacyRenderStyles[STYLE_Translucent];
 	dg.mVertCount = 2;
 	dg.mVertIndex = (int)mVertices.Reserve(2);
-	Set(&mVertices[dg.mVertIndex], x1, y1, 0, 0, 0, p);
-	Set(&mVertices[dg.mVertIndex+1], x2, y2, 0, 0, 0, p);
+	dg.useTransform = true;
+	dg.transform = this->transform;
+	dg.transform.Cells[0][2] += offset.X;
+	dg.transform.Cells[1][2] += offset.Y;
+	mVertices[dg.mVertIndex].Set(v1.X, v1.Y, 0, 0, 0, p);
+	mVertices[dg.mVertIndex+1].Set(v2.X, v2.Y, 0, 0, 0, p);
 	AddCommand(&dg);
 }
 
@@ -1008,23 +1075,20 @@ void F2DDrawer::AddLine(double x1, double y1, double x2, double y2, int clipx1, 
 //
 //==========================================================================
 
-void F2DDrawer::AddThickLine(int x1, int y1, int x2, int y2, double thickness, uint32_t color, uint8_t alpha)
+void F2DDrawer::AddThickLine(const DVector2& v1, const DVector2& v2, double thickness, uint32_t color, uint8_t alpha)
 {
 	PalEntry p = (PalEntry)color;
 	p.a = alpha;
 
-	DVector2 point0(x1, y1);
-	DVector2 point1(x2, y2);
-
-	DVector2 delta = point1 - point0;
-	DVector2 perp(-delta.Y, delta.X);
+	DVector2 delta = v2 - v1;
+	DVector2 perp = delta.Rotated90CCW();
 	perp.MakeUnit();
 	perp *= thickness / 2;
 
-	DVector2 corner0 = point0 + perp;
-	DVector2 corner1 = point0 - perp;
-	DVector2 corner2 = point1 + perp;
-	DVector2 corner3 = point1 - perp;
+	DVector2 corner0 = v1 + perp;
+	DVector2 corner1 = v1 - perp;
+	DVector2 corner2 = v2 + perp;
+	DVector2 corner3 = v2 - perp;
 
 	RenderCommand dg;
 
@@ -1033,10 +1097,14 @@ void F2DDrawer::AddThickLine(int x1, int y1, int x2, int y2, double thickness, u
 	dg.mVertIndex = (int)mVertices.Reserve(4);
 	dg.mRenderStyle = LegacyRenderStyles[STYLE_Translucent];
 	auto ptr = &mVertices[dg.mVertIndex];
-	Set(ptr, corner0.X, corner0.Y, 0, 0, 0, p); ptr++;
-	Set(ptr, corner1.X, corner1.Y, 0, 0, 0, p); ptr++;
-	Set(ptr, corner2.X, corner2.Y, 0, 0, 0, p); ptr++;
-	Set(ptr, corner3.X, corner3.Y, 0, 0, 0, p); ptr++;
+	ptr->Set(corner0.X, corner0.Y, 0, 0, 0, p); ptr++;
+	ptr->Set(corner1.X, corner1.Y, 0, 0, 0, p); ptr++;
+	ptr->Set(corner2.X, corner2.Y, 0, 0, 0, p); ptr++;
+	ptr->Set(corner3.X, corner3.Y, 0, 0, 0, p); ptr++;
+	dg.useTransform = true;
+	dg.transform = this->transform;
+	dg.transform.Cells[0][2] += offset.X;
+	dg.transform.Cells[1][2] += offset.Y;
 	dg.mIndexIndex = mIndices.Size();
 	dg.mIndexCount += 6;
 	AddIndices(dg.mVertIndex, 6, 0, 1, 2, 1, 3, 2);
@@ -1060,7 +1128,60 @@ void F2DDrawer::AddPixel(int x1, int y1, uint32_t color)
 	dg.mRenderStyle = LegacyRenderStyles[STYLE_Translucent];
 	dg.mVertCount = 1;
 	dg.mVertIndex = (int)mVertices.Reserve(1);
-	Set(&mVertices[dg.mVertIndex], x1, y1, 0, 0, 0, p);
+	mVertices[dg.mVertIndex].Set(x1, y1, 0, 0, 0, p);
+	dg.useTransform = true;
+	dg.transform = this->transform;
+	dg.transform.Cells[0][2] += offset.X;
+	dg.transform.Cells[1][2] += offset.Y;
+	AddCommand(&dg);
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+void F2DDrawer::AddEnableStencil(bool on)
+{
+	RenderCommand dg;
+
+	dg.isSpecial = SpecialDrawCommand::EnableStencil;
+	dg.stencilOn = on;
+
+	AddCommand(&dg);
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+void F2DDrawer::AddSetStencil(int offs, int op, int flags)
+{
+	RenderCommand dg;
+
+	dg.isSpecial = SpecialDrawCommand::SetStencil;
+	dg.stencilOffs = offs;
+	dg.stencilOp = op;
+	dg.stencilFlags = flags;
+
+	AddCommand(&dg);
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+void F2DDrawer::AddClearStencil()
+{
+	RenderCommand dg;
+
+	dg.isSpecial = SpecialDrawCommand::ClearStencil;
+
 	AddCommand(&dg);
 }
 
@@ -1082,6 +1203,17 @@ void F2DDrawer::Clear()
 	screenFade = 1.f;
 }
 
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+void F2DDrawer::OnFrameDone()
+{
+	buffersToDestroy.Clear();
+}
+
 F2DVertexBuffer::F2DVertexBuffer()
 {
 	mVertexBuffer = screen->CreateVertexBuffer();
@@ -1093,4 +1225,49 @@ F2DVertexBuffer::F2DVertexBuffer()
 		{ 0, VATTR_COLOR, VFmt_Byte4, (int)myoffsetof(F2DDrawer::TwoDVertex, color0) }
 	};
 	mVertexBuffer->SetFormat(1, 3, sizeof(F2DDrawer::TwoDVertex), format);
+}
+
+//==========================================================================
+//
+//
+//
+//==========================================================================
+
+TArray<FCanvas*> AllCanvases;
+
+class InitTextureCanvasGC
+{
+public:
+	InitTextureCanvasGC()
+	{
+		GC::AddMarkerFunc([]() {
+			for (auto canvas : AllCanvases)
+				GC::Mark(canvas);
+			});
+	}
+};
+
+FCanvas* GetTextureCanvas(const FString& texturename)
+{
+	FTextureID textureid = TexMan.CheckForTexture(texturename, ETextureType::Wall, FTextureManager::TEXMAN_Overridable);
+	if (textureid.isValid())
+	{
+		// Only proceed if the texture is a canvas texture.
+		auto tex = TexMan.GetGameTexture(textureid);
+		if (tex && tex->GetTexture()->isCanvas())
+		{
+			FCanvasTexture* canvasTex = static_cast<FCanvasTexture*>(tex->GetTexture());
+			if (!canvasTex->Canvas)
+			{
+				static InitTextureCanvasGC initCanvasGC; // Does the common code have a natural init function this could be moved to?
+
+				canvasTex->Canvas = Create<FCanvas>();
+				canvasTex->Canvas->Tex = canvasTex;
+				canvasTex->Canvas->Drawer.SetSize(tex->GetTexelWidth(), tex->GetTexelHeight());
+				AllCanvases.Push(canvasTex->Canvas);
+			}
+			return canvasTex->Canvas;
+		}
+	}
+	return nullptr;
 }

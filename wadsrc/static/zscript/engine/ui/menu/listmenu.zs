@@ -56,6 +56,9 @@ class ListMenuDescriptor : MenuDescriptor native
 	native int mFontColor2;
 	native bool mCenter;
 	native bool mAnimatedTransition;
+	native bool mAnimated;
+	native bool mDontBlur;
+	native bool mDontDim;
 	native int mVirtWidth, mVirtHeight;
 
 	native void Reset();
@@ -87,6 +90,9 @@ class ListMenu : Menu
 		Super.Init(parent);
 		mDesc = desc;
 		AnimatedTransition = mDesc.mAnimatedTransition;
+		Animated = mDesc.mAnimated;
+		DontBlur = mDesc.mDontBlur;
+		DontDim = mDesc.mDontDim;
 		if (desc.mCenter)
 		{
 			double center = 160;
@@ -118,7 +124,7 @@ class ListMenu : Menu
 			mDesc.mItems[i].OnMenuCreated();
 		}
 	}
-	
+
 	//=============================================================================
 	//
 	//
@@ -134,7 +140,7 @@ class ListMenu : Menu
 		}
 		return NULL;
 	}
-	
+
 
 	//=============================================================================
 	//
@@ -241,7 +247,7 @@ class ListMenu : Menu
 			int h = mDesc.DisplayHeight();
 			double fx, fy, fw, fh;
 			[fx, fy, fw, fh] = Screen.GetFullscreenRect(w, h, FSMode_ScaleToFit43);
-			
+
 			x = int((x - fx) * w / fw);
 			y = int((y - fy) * h / fh);
 		}
@@ -258,7 +264,7 @@ class ListMenu : Menu
 			{
 				for(int i=0;i<mDesc.mItems.Size(); i++)
 				{
-					if (mDesc.mItems[i].CheckCoordinate(x, y))
+					if (mDesc.mItems[i].Selectable() && mDesc.mItems[i].CheckCoordinate(x, y))
 					{
 						if (i != mDesc.mSelectedItem)
 						{
@@ -309,7 +315,7 @@ class ListMenu : Menu
 		}
 		Super.Drawer();
 	}
-	
+
 	//=============================================================================
 	//
 	//
@@ -327,6 +333,36 @@ class ListMenu : Menu
 	override void ReleaseFocus()
 	{
 		mFocusControl = NULL;
+	}
+
+	//=============================================================================
+	//
+	//
+	//
+	//=============================================================================
+
+	void ChangeLineSpacing(int newspace)
+	{
+		double top = -32767;
+
+		for (int i = 0; i < mDesc.mItems.Size(); i++)
+		{
+			let selitem = ListMenuItemSelectable(mDesc.mItems[i]);
+			if (selitem)
+			{
+				let y = mDesc.mItems[i].GetY();
+				if (top == -32767)
+				{
+					top = y;
+				}
+				else
+				{
+					let newy = top + (y - top) / mDesc.mLineSpacing * newspace;
+					mDesc.mItems[i].SetY(newy);
+				}
+			}
+		}
+		mDesc.mLineSpacing = newspace;
 	}
 }
 

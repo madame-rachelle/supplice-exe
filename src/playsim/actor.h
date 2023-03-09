@@ -30,7 +30,7 @@
 #define __P_MOBJ_H__
 
 // Basics.
-#include "templates.h"
+
 
 // We need the thinker_t stuff.
 #include "dthinker.h"
@@ -47,6 +47,7 @@
 #include "g_level.h"
 #include "tflags.h"
 #include "portal.h"
+#include "bonecomponents.h"
 
 struct subsector_t;
 struct FBlockNode;
@@ -142,7 +143,7 @@ enum ActorFlag
 	MF_DROPOFF			= 0x00000400,	// allow jumps from high places
 	MF_PICKUP			= 0x00000800,	// for players to pick up items
 	MF_NOCLIP			= 0x00001000,	// player cheat
-	MF_INCHASE			= 0x00002000,	// [RH] used by A_Chase and A_Look to avoid recursion
+	MF_SLIDE			= 0x00002000,	// Not used anymore but needed for MBF21 flag checkers.
 	MF_FLOAT			= 0x00004000,	// allow moves to any height, no gravity
 	MF_TELEPORT			= 0x00008000,	// don't cross lines or look at heights
 	MF_MISSILE			= 0x00010000,	// don't hit same species, explode on block
@@ -167,9 +168,6 @@ enum ActorFlag
 	MF_NOLIFTDROP		= 0x20000000,	// [RH] Used with MF_NOGRAVITY to avoid dropping with lifts
 	MF_STEALTH			= 0x40000000,	// [RH] Andy Baker's stealth monsters
 	MF_ICECORPSE		= 0x80000000,	// a frozen corpse (for blasting) [RH] was 0x800000
-
-	// --- dummies for unknown/unimplemented Strife flags ---
-	MF_STRIFEx8000000 = 0,		// seems related to MF_SHADOW
 };
 
 // --- mobj.flags2 ---
@@ -399,6 +397,7 @@ enum ActorFlag7
 	MF7_FORCEZERORADIUSDMG = 0x10000000,	// passes zero radius damage on to P_DamageMobj, this is necessary in some cases where DoSpecialDamage gets overrideen.
 	MF7_NOINFIGHTSPECIES = 0x20000000,	// don't start infights with one's own species.
 	MF7_FORCEINFIGHTING	= 0x40000000,	// overrides a map setting of 'no infighting'.
+	MF7_INCHASE			= 0x80000000,	// [RH] used by A_Chase and A_Look to avoid recursion
 };
 enum ActorFlag8
 {
@@ -414,7 +413,23 @@ enum ActorFlag8
 	MF8_STOPRAILS		= 0x00000200,	// [MC] Prevent rails from going further if an actor has this flag.
 	MF8_ABSVIEWANGLES	= 0x00000400,	// [MC] By default view angle/pitch/roll is an offset. This will make it absolute instead.
 	MF8_FALLDAMAGE		= 0x00000800,	// Monster will take fall damage regardless of map settings.
-	MF8_ALLOWTHRUBITS		= 0x00008000,	// [MC] Enable ThruBits property
+	MF8_ALLOWTHRUBITS	= 0x00008000,	// [MC] Enable ThruBits property
+	MF8_FULLVOLSEE		= 0x00010000,	// Play see sound at full volume
+	MF8_E1M8BOSS		= 0x00020000,	// MBF21 boss death.
+	MF8_E2M8BOSS		= 0x00040000,	// MBF21 boss death.
+	MF8_E3M8BOSS		= 0x00080000,	// MBF21 boss death.
+	MF8_E4M8BOSS		= 0x00100000,	// MBF21 boss death.
+	MF8_E4M6BOSS		= 0x00200000,	// MBF21 boss death.
+	MF8_MAP07BOSS1		= 0x00400000,	// MBF21 boss death.
+	MF8_MAP07BOSS2		= 0x00800000,	// MBF21 boss death.
+	MF8_AVOIDHAZARDS	= 0x01000000,	// MBF AI enhancement.
+	MF8_STAYONLIFT		= 0x02000000,	// MBF AI enhancement.
+	MF8_DONTFOLLOWPLAYERS	= 0x04000000,	// [inkoalawetrust] Friendly monster will not follow players.
+	MF8_SEEFRIENDLYMONSTERS	= 0X08000000,	// [inkoalawetrust] Hostile monster can see friendly monsters.
+	MF8_CROSSLINECHECK	= 0x10000000,	// [MC]Enables CanCrossLine virtual
+	MF8_MASTERNOSEE		= 0x20000000,	// Don't show object in first person if their master is the current camera.
+	MF8_ADDLIGHTLEVEL	= 0x40000000,	// [MC] Actor light level is additive with sector.
+	MF8_ONLYSLAMSOLID	= 0x80000000,	// [B] Things with skullfly will ignore non-solid Actors.
 };
 
 // --- mobj.renderflags ---
@@ -464,6 +479,12 @@ enum ActorRenderFlag
 	RF_NOSPRITESHADOW = 0x80000000,		// actor will not cast a sprite shadow
 };
 
+enum ActorRenderFlag2
+{
+	RF2_INVISIBLEINMIRRORS		= 0x0001,	// [Nash] won't render in mirrors
+	RF2_ONLYVISIBLEINMIRRORS	= 0x0002,	// [Nash] only renders in mirrors
+};
+
 // This translucency value produces the closest match to Heretic's TINTTAB.
 // ~40% of the value of the overlaid image shows through.
 const double HR_SHADOW = (0x6800 / 65536.);
@@ -502,6 +523,7 @@ enum ActorBounceFlag
 	BOUNCE_NotOnShootables = 1<<15,	// do not bounce off shootable actors if we are a projectile. Explode instead.
 	BOUNCE_BounceOnUnrips = 1<<16,	// projectile bounces on actors with DONTRIP
 	BOUNCE_NotOnSky = 1<<17,		// Don't bounce on sky floors / ceilings / walls
+	BOUNCE_DEH = 1<<18,				// Flag was set through Dehacked.
 
 	BOUNCE_TypeMask = BOUNCE_Walls | BOUNCE_Floors | BOUNCE_Ceilings | BOUNCE_Actors | BOUNCE_AutoOff | BOUNCE_HereticType | BOUNCE_MBF,
 
@@ -565,6 +587,7 @@ typedef TFlags<ActorFlag6> ActorFlags6;
 typedef TFlags<ActorFlag7> ActorFlags7;
 typedef TFlags<ActorFlag8> ActorFlags8;
 typedef TFlags<ActorRenderFlag> ActorRenderFlags;
+typedef TFlags<ActorRenderFlag2> ActorRenderFlags2;
 typedef TFlags<ActorBounceFlag> ActorBounceFlags;
 typedef TFlags<ActorRenderFeatureFlag> ActorRenderFeatureFlags;
 DEFINE_TFLAGS_OPERATORS (ActorFlags)
@@ -576,6 +599,7 @@ DEFINE_TFLAGS_OPERATORS (ActorFlags6)
 DEFINE_TFLAGS_OPERATORS (ActorFlags7)
 DEFINE_TFLAGS_OPERATORS (ActorFlags8)
 DEFINE_TFLAGS_OPERATORS (ActorRenderFlags)
+DEFINE_TFLAGS_OPERATORS (ActorRenderFlags2)
 DEFINE_TFLAGS_OPERATORS (ActorBounceFlags)
 DEFINE_TFLAGS_OPERATORS (ActorRenderFeatureFlags)
 
@@ -645,18 +669,70 @@ struct FDropItem
 	int Amount;
 };
 
+enum EViewPosFlags // [MC] Flags for SetViewPos.
+{
+	VPSF_ABSOLUTEOFFSET =	1 << 1,			// Don't include angles.
+	VPSF_ABSOLUTEPOS =		1 << 2,			// Use absolute position.
+};
+
+class DActorModelData : public DObject
+{
+	DECLARE_CLASS(DActorModelData, DObject);
+public:
+	FName				modelDef;
+	bool				hasModel;
+	TArray<int>			modelIDs;
+	TArray<FTextureID>	skinIDs;
+	TArray<FTextureID>	surfaceSkinIDs;
+	TArray<int>			animationIDs;
+	TArray<int>			modelFrameGenerators;
+
+	DActorModelData() = default;
+	virtual void Serialize(FSerializer& arc) override;
+};
+
+class DViewPosition : public DObject
+{
+	DECLARE_CLASS(DViewPosition, DObject);
+public:
+	// Variables
+	// Exposed to ZScript
+	DVector3	Offset;
+	int			Flags;
+
+	// Functions
+	DViewPosition()
+	{
+		Offset = { 0,0,0 };
+		Flags = 0;
+	}
+
+	void Set(DVector3 &off, int f = -1)
+	{
+		Offset = off;
+
+		if (f > -1)
+			Flags = f;
+	}
+
+	bool isZero()
+	{
+		return Offset.isZero();
+	}
+};
+
 const double MinVel = EQUAL_EPSILON;
 
 // Map Object definition.
-class AActor : public DThinker
+class AActor final : public DThinker
 {
 	DECLARE_CLASS_WITH_META (AActor, DThinker, PClassActor)
 	HAS_OBJECT_POINTERS
 public:
 	AActor() = default;
 	AActor(const AActor &other) = delete;	// Calling this would be disastrous.
-	AActor &operator= (const AActor &other);
-	~AActor ();
+	AActor &operator= (const AActor &other) = delete;
+	~AActor () = default;
 
 	virtual void OnDestroy() override;
 	virtual void Serialize(FSerializer &arc) override;
@@ -679,17 +755,11 @@ public:
 
 	FDropItem *GetDropItems() const;
 
-	// Return true if the monster should use a missile attack, false for melee
-	bool SuggestMissileAttack (double dist);
-
 	// Adjusts the angle for deflection/reflection of incoming missiles
 	// Returns true if the missile should be allowed to explode anyway
 	bool AdjustReflectionAngle (AActor *thing, DAngle &angle);
 	int AbsorbDamage(int damage, FName dmgtype, AActor *inflictor, AActor *source, int flags);
 	void AlterWeaponSprite(visstyle_t *vis);
-
-	// Returns true if this actor is within melee range of its target
-	bool CheckMeleeRange();
 
 	bool CheckNoDelay();
 
@@ -727,8 +797,11 @@ public:
 	bool CallSlam(AActor *victim);
 
 	// Something just touched this actor.
-	virtual void Touch(AActor *toucher);
 	void CallTouch(AActor *toucher);
+
+	// Apply gravity and/or make actor sink in water.
+	virtual void FallAndSink(double grav, double oldfloorz);
+	void CallFallAndSink(double grav, double oldfloorz);
 
 	// Centaurs and ettins squeal when electrocuted, poisoned, or "holy"-ed
 	// Made a metadata property so no longer virtual
@@ -736,6 +809,9 @@ public:
 
 	// plays bouncing sound
 	void PlayBounceSound(bool onfloor);
+
+	// plays pushing sound
+	void PlayPushSound();
 
 	// Called when an actor with MF_MISSILE and MF2_FLOORBOUNCE hits the floor
 	bool FloorBounceMissile (secplane_t &plane);
@@ -764,9 +840,6 @@ public:
 	// Tosses an item out of the inventory.
 	AActor *DropInventory (AActor *item, int amt = -1);
 
-	// Removes all items from the inventory.
-	void ClearInventory();
-
 	// Returns true if this view is considered "local" for the player.
 	bool CheckLocalView() const;
 
@@ -780,9 +853,6 @@ public:
 
 	// Adds one item of a particular type. Returns NULL if it could not be added.
 	AActor *GiveInventoryType (PClassActor *type);
-
-	// Destroys all the inventory the actor is holding.
-	void DestroyAllInventory ();
 
 	// Set the alphacolor field properly
 	void SetShade (uint32_t rgb);
@@ -801,7 +871,6 @@ public:
 	bool Massacre ();
 
 	// Transforms the actor into a finely-ground paste
-	bool Grind(bool items);
 	bool CallGrind(bool items);
 
 	// Get this actor's team
@@ -854,6 +923,8 @@ public:
 	void SetPitch(DAngle p, int fflags);
 	void SetAngle(DAngle ang, int fflags);
 	void SetRoll(DAngle roll, int fflags);
+
+	// These also set CF_INTERPVIEWANGLES for players.
 	void SetViewPitch(DAngle p, int fflags);
 	void SetViewAngle(DAngle ang, int fflags);
 	void SetViewRoll(DAngle roll, int fflags);
@@ -971,7 +1042,8 @@ public:
 	DAngle			SpriteAngle;
 	DAngle			SpriteRotation;
 	DRotator		Angles;
-	DRotator		ViewAngles;			// Offsets for cameras
+	DRotator		ViewAngles;			// Angle offsets for cameras
+	TObjPtr<DViewPosition*> ViewPos;			// Position offsets for cameras
 	DVector2		Scale;				// Scaling values; 1 is normal size
 	double			Alpha;				// Since P_CheckSight makes an alpha check this can't be a float. It has to be a double.
 
@@ -988,6 +1060,7 @@ public:
 	uint32_t			RenderHidden;		// current renderer must *not* have any of these features
 
 	ActorRenderFlags	renderflags;		// Different rendering flags
+	ActorRenderFlags2	renderflags2;		// More rendering flags...
 	ActorFlags		flags;
 	ActorFlags2		flags2;			// Heretic flags
 	ActorFlags3		flags3;			// [RH] Hexen/Heretic actor-dependant behavior made flaggable
@@ -1007,8 +1080,11 @@ public:
 	DVector3		OldRenderPos;
 	DVector3		Vel;
 	DVector2		SpriteOffset;
+	DVector3		WorldOffset;
 	double			Speed;
 	double			FloatSpeed;
+	TObjPtr<DActorModelData*>		modelData;
+	TObjPtr<DBoneComponents*>		boneComponentData;
 
 // interaction info
 	FBlockNode		*BlockNode;			// links in blocks (if needed)
@@ -1040,32 +1116,36 @@ public:
 	FState			*state;
 	//VMFunction		*Damage;			// For missiles and monster railgun
 	int				DamageVal;
-	VMFunction		*DamageFunc;
 	int				projectileKickback;
+	VMFunction		*DamageFunc;
 
 	// [BB] If 0, everybody can see the actor, if > 0, only members of team (VisibleToTeam-1) can see it.
-	uint32_t			VisibleToTeam;
 
 	int				special1;		// Special info
 	int				special2;		// Special info
 	double			specialf1;		// With floats we cannot use the int versions for storing position or angle data without reverting to fixed point (which we do not want.)
 	double			specialf2;
 
+	uint32_t			VisibleToTeam;
 	int				weaponspecial;	// Special info for weapons.
 	int 			health;
-	uint8_t			movedir;		// 0-7
-	int8_t			visdir;
-	int16_t			movecount;		// when 0, select a new dir
-	int16_t			strafecount;	// for MF3_AVOIDMELEE
-	uint16_t			SpawnAngle;
-	TObjPtr<AActor*> target;			// thing being chased/attacked (or NULL)
-									// also the originator for missiles
-	TObjPtr<AActor*>	lastenemy;		// Last known enemy -- killough 2/15/98
-	TObjPtr<AActor*> LastHeard;		// [RH] Last actor this one heard
 	int32_t			reactiontime;	// if non 0, don't attack yet; used by
 									// player to freeze a bit after teleporting
 	int32_t			threshold;		// if > 0, the target will be chased
 	int32_t			DefThreshold;	// [MC] Default threshold which the actor will reset its threshold to after switching targets
+
+	uint8_t			movedir;		// 0-7
+	int8_t			visdir;
+	int16_t			movecount;		// when 0, select a new dir
+
+	int16_t			strafecount;	// for MF3_AVOIDMELEE
+	int16_t			LightLevel;		// Allows for overriding sector light levels.
+	uint16_t			SpawnAngle;
+
+	TObjPtr<AActor*> target;			// thing being chased/attacked (or NULL)
+									// also the originator for missiles
+	TObjPtr<AActor*>	lastenemy;		// Last known enemy -- killough 2/15/98
+	TObjPtr<AActor*> LastHeard;		// [RH] Last actor this one heard
 									// no matter what (even if shot)
 	player_t		*player;		// only valid if type of PlayerPawn
 	TObjPtr<AActor*>	LastLookActor;	// Actor last looked for (if TIDtoHate != 0)
@@ -1089,6 +1169,7 @@ public:
 	AActor			*inext, **iprev;// Links to other mobjs in same bucket
 	TObjPtr<AActor*> goal;			// Monster's goal if not chasing anything
 	int				waterlevel;		// 0=none, 1=feet, 2=waist, 3=eyes
+	double			waterdepth;		// Stores how deep into water you are, in map units
 	uint8_t			boomwaterlevel;	// splash information for non-swimmable water sectors
 	uint8_t			MinMissileChance;// [RH] If a random # is > than this, then missile attack.
 	int8_t			LastLookPlayerNumber;// Player number last looked for (if TIDtoHate == 0)
@@ -1120,6 +1201,8 @@ public:
 	sector_t		*BlockingCeiling;	// Sector that blocked the last move (ceiling plane slope)
 	sector_t		*BlockingFloor;		// Sector that blocked the last move (floor plane slope)
 
+	uint32_t		freezetics;	// actor has actions completely frozen (including movement) for this many tics, but they still get Tick() calls
+
 	int PoisonDamage; // Damage received per tic from poison.
 	FName PoisonDamageType; // Damage type dealt by poison.
 	int PoisonDuration; // Duration left for receiving poison damage.
@@ -1150,15 +1233,15 @@ public:
 	uint32_t BloodTranslation;
 
 	// [RH] Stuff that used to be part of an Actor Info
-	FSoundIDNoInit SeeSound;
-	FSoundIDNoInit AttackSound;
-	FSoundIDNoInit PainSound;
-	FSoundIDNoInit DeathSound;
-	FSoundIDNoInit ActiveSound;
-	FSoundIDNoInit UseSound;		// [RH] Sound to play when an actor is used.
-	FSoundIDNoInit BounceSound;
-	FSoundIDNoInit WallBounceSound;
-	FSoundIDNoInit CrushPainSound;
+	FSoundID SeeSound;
+	FSoundID AttackSound;
+	FSoundID PainSound;
+	FSoundID DeathSound;
+	FSoundID ActiveSound;
+	FSoundID UseSound;		// [RH] Sound to play when an actor is used.
+	FSoundID BounceSound;
+	FSoundID WallBounceSound;
+	FSoundID CrushPainSound;
 
 	double MaxDropOffHeight;
 	double MaxStepHeight;
@@ -1225,10 +1308,9 @@ public:
 	void UnlinkFromWorld(FLinkContext *ctx);
 	void AdjustFloorClip ();
 	bool IsMapActor();
-	int GetTics(FState * newstate);
 	bool SetState (FState *newstate, bool nofunction=false);
-	virtual void SplashCheck();
-	virtual bool UpdateWaterLevel (bool splash=true);
+	void SplashCheck();
+	bool UpdateWaterLevel (bool splash=true);
 	bool isFast();
 	bool isSlow();
 	void SetIdle(bool nofunction=false);
@@ -1298,7 +1380,7 @@ public:
 
 	double RenderRadius() const
 	{
-		return MAX(radius, renderradius);
+		return max(radius, renderradius);
 	}
 
 	DVector3 PosRelative(int grp) const;
@@ -1450,15 +1532,17 @@ public:
 	// Better have it in one place, if something needs to be changed about the formula.
 	double DistanceBySpeed(AActor *dest, double speed) const
 	{
-		return MAX(1., Distance2D(dest) / speed);
+		return max(1., Distance2D(dest) / speed);
 	}
 
+	int GetLightLevel(sector_t* rendersector);
 	int ApplyDamageFactor(FName damagetype, int damage) const;
 	int GetModifiedDamage(FName damagetype, int damage, bool passive, AActor *inflictor, AActor *source, int flags = 0);
 	void DeleteAttachedLights();
 	bool isFrozen() const;
 
 	bool				hasmodel;
+
 };
 
 class FActorIterator

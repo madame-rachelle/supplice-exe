@@ -21,7 +21,7 @@ class FTextureManager
 public:
 	FTextureManager ();
 	~FTextureManager ();
-	
+
 private:
 	int ResolveLocalizedTexture(int texnum);
 
@@ -57,7 +57,7 @@ public:
 	{
 		return InternalGetTexture(texnum.GetIndex(), animate, true);
 	}
-	
+
 	FGameTexture* GetPalettedTexture(FTextureID texnum, bool animate = false, bool allowsubstitute = true)
 	{
 		auto texid = ResolveTextureIndex(texnum.GetIndex(), animate, true);
@@ -77,7 +77,15 @@ public:
 
 	void FlushAll();
 	FTextureID GetFrontSkyLayer(FTextureID);
-	FTextureID GetRawTexture(FTextureID);
+	FTextureID GetRawTexture(FTextureID tex, bool dontlookup = false);
+	void SetRawTexture(FTextureID texid) 
+	{ 
+		int texidx = texid.GetIndex();
+		if ((unsigned)texidx < Textures.Size())
+		{
+			Textures[texidx].RawTexture = texidx;
+		}
+	}
 
 
 	enum
@@ -123,7 +131,8 @@ public:
 
 	void LoadTextureX(int wadnum, FMultipatchTextureBuilder &build);
 	void AddTexturesForWad(int wadnum, FMultipatchTextureBuilder &build);
-	void Init(void (*progressFunc_)(), void (*checkForHacks)(BuildInfo &));
+	void Init();
+	void AddTextures(void (*progressFunc_)(), void (*checkForHacks)(BuildInfo&), void (*customtexturehandler)() = nullptr);
 	void DeleteAll();
 
 	void ReplaceTexture (FTextureID picnum, FGameTexture *newtexture, bool free);
@@ -171,7 +180,7 @@ public:
 private:
 
 	void InitPalettedVersions();
-	
+
 	// Switches
 
 	struct TextureHash
@@ -206,6 +215,7 @@ public:
 	FTextureID glPart2;
 	FTextureID glPart;
 	FTextureID mirrorTexture;
+	bool usefullnames;
 
 };
 

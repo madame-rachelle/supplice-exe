@@ -36,7 +36,7 @@
 #include <chrono>
 
 #include "c_cvars.h"
-#include "templates.h"
+
 #include "oalsound.h"
 #include "c_dispatch.h"
 #include "v_text.h"
@@ -183,6 +183,8 @@ class OpenALSoundStream : public SoundStream
 	std::atomic<bool> Playing;
 	//bool Looping;
 	ALfloat Volume;
+	uint64_t Offset = 0;
+	std::mutex Mutex;
 
 	bool SetupSource()
 	{
@@ -263,6 +265,7 @@ public:
 			return true;
 
 		/* Clear the buffer queue, then fill and queue each buffer */
+		Offset = 0;
 		alSourcei(Source, AL_BUFFER, 0);
 		for(int i = 0;i < BufferCount;i++)
 		{
@@ -297,6 +300,7 @@ public:
 		alSourcei(Source, AL_BUFFER, 0);
 		getALError();
 
+		Offset = 0;
 		Playing.store(false);
 	}
 
@@ -324,12 +328,49 @@ public:
 	virtual bool IsEnded()
 	{
 		return !Playing.load();
-			}
+	}
+
+	Position GetPlayPosition() override
+	{
+		using namespace std::chrono;
+
+		std::lock_guard _{Mutex};
+		ALint64SOFT offset[2]{};
+		ALint state{}, queued{};
+		alGetSourcei(Source, AL_BUFFERS_QUEUED, &queued);
+		if(Renderer->AL.SOFT_source_latency)
+		{
+			// AL_SAMPLE_OFFSET_LATENCY_SOFT fills offset[0] with the source sample
+			// offset in 32.32 fixed-point (which we chop off the sub-sample position
+			// since it's not crucial), and offset[1] with the playback latency in
+			// nanoseconds (how many nanoseconds until the sample point in offset[0]
+			// reaches the DAC).
+			Renderer->alGetSourcei64vSOFT(Source, AL_SAMPLE_OFFSET_LATENCY_SOFT, offset);
+			offset[0] >>= 32;
+		}
+		else
+		{
+			// Without AL_SOFT_source_latency, we can only get the sample offset, no
+			// latency info.
+			ALint ioffset{};
+			alGetSourcei(Source, AL_SAMPLE_OFFSET, &ioffset);
+			offset[0] = ioffset;
+			offset[1] = 0;
+		}
+		alGetSourcei(Source, AL_SOURCE_STATE, &state);
+		// If the source is stopped, there was an underrun, so the play position is
+		// the end of the queue.
+		if(state == AL_STOPPED)
+			return Position{Offset + queued*(Data.Size()/FrameSize), nanoseconds{offset[1]}};
+		// The offset is otherwise valid as long as the source has been started.
+		if(state != AL_INITIAL)
+			return Position{Offset + offset[0], nanoseconds{offset[1]}};
+		return Position{0, nanoseconds{0}};
+	}
 
 	virtual FString GetStats()
 		{
 		FString stats;
-		size_t pos = 0, len = 0;
 		ALfloat volume;
 		ALint offset;
 		ALint processed;
@@ -387,8 +428,12 @@ public:
 
 			// Unqueue the oldest buffer, fill it with more data, and queue it
 			// on the end
-			alSourceUnqueueBuffers(Source, 1, &bufid);
-			processed--;
+			{
+				std::lock_guard _{Mutex};
+				alSourceUnqueueBuffers(Source, 1, &bufid);
+				Offset += Data.Size() / FrameSize;
+				processed--;
+			}
 
 			if(Callback(this, &Data[0], Data.Size(), UserData))
 			{
@@ -579,7 +624,7 @@ OpenALSoundRenderer::OpenALSoundRenderer()
 	// Make sure one source is capable of stereo output with the rest doing
 	// mono, without running out of voices
 	attribs.Push(ALC_MONO_SOURCES);
-	attribs.Push(std::max<ALCint>(snd_channels, 2) - 1);
+	attribs.Push(max<ALCint>(snd_channels, 2) - 1);
 	attribs.Push(ALC_STEREO_SOURCES);
 	attribs.Push(1);
 	if(ALC.SOFT_HRTF)
@@ -625,6 +670,7 @@ OpenALSoundRenderer::OpenALSoundRenderer()
 	AL.EXT_SOURCE_RADIUS = !!alIsExtensionPresent("AL_EXT_SOURCE_RADIUS");
 	AL.SOFT_deferred_updates = !!alIsExtensionPresent("AL_SOFT_deferred_updates");
 	AL.SOFT_loop_points = !!alIsExtensionPresent("AL_SOFT_loop_points");
+	AL.SOFT_source_latency = !!alIsExtensionPresent("AL_SOFT_source_latency");
 	AL.SOFT_source_resampler = !!alIsExtensionPresent("AL_SOFT_source_resampler");
 	AL.SOFT_source_spatialize = !!alIsExtensionPresent("AL_SOFT_source_spatialize");
 
@@ -652,6 +698,8 @@ OpenALSoundRenderer::OpenALSoundRenderer()
 		alProcessUpdatesSOFT = _wrap_ProcessUpdatesSOFT;
 	}
 
+	if(AL.SOFT_source_latency)
+		LOAD_FUNC(alGetSourcei64vSOFT);
 	if(AL.SOFT_source_resampler)
 		LOAD_FUNC(alGetStringiSOFT);
 
@@ -681,7 +729,7 @@ OpenALSoundRenderer::OpenALSoundRenderer()
 	// At least Apple's OpenAL implementation returns zeroes,
 	// although it can generate reasonable number of sources.
 
-	const int numChannels = std::max<int>(snd_channels, 2);
+	const int numChannels = max<int>(snd_channels, 2);
 	int numSources = numMono + numStereo;
 
 	if (0 == numSources)
@@ -689,7 +737,7 @@ OpenALSoundRenderer::OpenALSoundRenderer()
 		numSources = numChannels;
 	}
 
-	Sources.Resize(std::min<int>(numChannels, numSources));
+	Sources.Resize(min<int>(numChannels, numSources));
 	for(unsigned i = 0;i < Sources.Size();i++)
 	{
 		alGenSources(1, &Sources[i]);
@@ -1346,7 +1394,7 @@ FISoundChannel *OpenALSoundRenderer::StartSound3D(SoundHandle sfx, SoundListener
 		float gain = GetRolloff(rolloff, dist * distscale);
 		// Don't let the ref distance go to 0, or else distance attenuation is
 		// lost with the inverse distance model.
-		alSourcef(source, AL_REFERENCE_DISTANCE, std::max<float>(gain*dist, 0.0004f));
+		alSourcef(source, AL_REFERENCE_DISTANCE, max<float>(gain*dist, 0.0004f));
 		alSourcef(source, AL_MAX_DISTANCE, std::numeric_limits<float>::max());
 		alSourcef(source, AL_ROLLOFF_FACTOR, 1.f);
 	}
@@ -1466,9 +1514,9 @@ void OpenALSoundRenderer::ChannelPitch(FISoundChannel *chan, float pitch)
 
 	ALuint source = GET_PTRID(chan->SysChannel);
 	if (WasInWater && !(chan->ChanFlags & CHANF_UI))
-		alSourcef(source, AL_PITCH, std::max(pitch, 0.0001f)*PITCH_MULT);
+		alSourcef(source, AL_PITCH, max(pitch, 0.0001f)*PITCH_MULT);
 	else
-		alSourcef(source, AL_PITCH, std::max(pitch, 0.0001f));
+		alSourcef(source, AL_PITCH, max(pitch, 0.0001f));
 }
 
 void OpenALSoundRenderer::StopChannel(FISoundChannel *chan)
@@ -1622,7 +1670,7 @@ void OpenALSoundRenderer::UpdateSoundParams3D(SoundListener *listener, FISoundCh
 		{
 			float dist = sqrtf(dist_sqr);
 			float gain = GetRolloff(&chan->Rolloff, dist * chan->DistanceScale);
-			alSourcef(source, AL_REFERENCE_DISTANCE, std::max<float>(gain*dist, 0.0004f));
+			alSourcef(source, AL_REFERENCE_DISTANCE, max<float>(gain*dist, 0.0004f));
 		}
 
 		alSourcei(source, AL_SOURCE_RELATIVE, AL_FALSE);
@@ -1676,7 +1724,7 @@ void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 
 		const_cast<ReverbContainer*>(env)->Modified = false;
 	}
-	
+
 	// NOTE: Moving into and out of water will undo pitch variations on sounds.
 	if(listener->underwater || env->SoftwareWater)
 	{
@@ -1722,7 +1770,7 @@ void OpenALSoundRenderer::UpdateListener(SoundListener *listener)
 	}
 	else if(WasInWater)
 	{
-		
+
 		WasInWater = false;
 
 		if(EnvSlot != 0)

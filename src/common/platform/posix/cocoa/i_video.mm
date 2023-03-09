@@ -52,13 +52,13 @@
 #include "v_text.h"
 #include "version.h"
 #include "printf.h"
-
 #include "gl_framebuffer.h"
+#ifdef HAVE_GLES2
+#include "gles_framebuffer.h"
+#endif
+
 #ifdef HAVE_VULKAN
 #include "vulkan/system/vk_framebuffer.h"
-#endif
-#ifdef HAVE_SOFTPOLY
-#include "poly_framebuffer.h"
 #endif
 
 extern bool ToggleFullscreen;
@@ -98,7 +98,6 @@ extern bool ToggleFullscreen;
 EXTERN_CVAR(Bool, vid_hidpi)
 EXTERN_CVAR(Int,  vid_defwidth)
 EXTERN_CVAR(Int,  vid_defheight)
-EXTERN_CVAR(Int,  vid_preferbackend)
 EXTERN_CVAR(Bool, vk_debug)
 
 CVAR(Bool, mvk_debug, false, 0)
@@ -118,8 +117,8 @@ namespace
 	const NSInteger LEVEL_FULLSCREEN = NSMainMenuWindowLevel + 1;
 	const NSInteger LEVEL_WINDOWED   = NSNormalWindowLevel;
 
-	const NSUInteger STYLE_MASK_FULLSCREEN = NSBorderlessWindowMask;
-	const NSUInteger STYLE_MASK_WINDOWED   = NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask;
+	const NSUInteger STYLE_MASK_FULLSCREEN = NSWindowStyleMaskBorderless;
+	const NSUInteger STYLE_MASK_WINDOWED   = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
 }
 
 
@@ -373,7 +372,7 @@ class CocoaVideo : public IVideo
 public:
 	CocoaVideo()
 	{
-		ms_isVulkanEnabled = vid_preferbackend == 1 && NSAppKitVersionNumber >= 1404; // NSAppKitVersionNumber10_11
+		ms_isVulkanEnabled = V_GetBackend() == 1 && NSAppKitVersionNumber >= 1404; // NSAppKitVersionNumber10_11
 	}
 
 	~CocoaVideo()
@@ -446,23 +445,17 @@ public:
 		}
 		else
 #endif
-			
-#ifdef HAVE_SOFTPOLY
-		if (vid_preferbackend == 2)
-		{
-			SetupOpenGLView(ms_window, OpenGLProfile::Legacy);
 
-			fb = new PolyFrameBuffer(nullptr, vid_fullscreen);
-		}
-		else
-#endif
-		{
-			SetupOpenGLView(ms_window, OpenGLProfile::Core);
-		}
+		SetupOpenGLView(ms_window, OpenGLProfile::Core);
 
 		if (fb == nullptr)
 		{
-			fb = new OpenGLRenderer::OpenGLFrameBuffer(0, vid_fullscreen);
+#ifdef HAVE_GLES2
+			if(V_GetBackend() == 2)
+				fb = new OpenGLESRenderer::OpenGLFrameBuffer(0, vid_fullscreen);
+			else
+#endif
+				fb = new OpenGLRenderer::OpenGLFrameBuffer(0, vid_fullscreen);
 		}
 
 		fb->SetWindow(ms_window);
@@ -824,7 +817,7 @@ bool I_SetCursor(FGameTexture *cursorpic)
 	if (NULL != cursorpic && cursorpic->isValid())
 	{
 		// Create bitmap image representation
-		
+
 		auto sbuffer = cursorpic->GetTexture()->CreateTexBuffer(0);
 
 		const NSInteger imageWidth  = sbuffer.mWidth;
@@ -865,11 +858,11 @@ bool I_SetCursor(FGameTexture *cursorpic)
 		cursor = [[NSCursor alloc] initWithImage:cursorImage
 										 hotSpot:NSMakePoint(0.0f, 0.0f)];
 	}
-	
+
 	SystemBaseFrameBuffer::SetCursor(cursor);
-	
+
 	[pool release];
-	
+
 	return true;
 }
 
@@ -961,7 +954,7 @@ bool I_GetVulkanPlatformExtensions(unsigned int *count, const char **names)
 	else
 	{
 		const bool result = *count >= extensionCount;
-		*count = std::min(*count, extensionCount);
+		*count = min(*count, extensionCount);
 
 		for (unsigned int i = 0; i < *count; ++i)
 		{

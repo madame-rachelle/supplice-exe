@@ -56,7 +56,7 @@
 #include "g_level.h"
 #include "d_event.h"
 #include "p_tick.h"
-#include "st_start.h"
+#include "startscreen.h"
 #include "d_main.h"
 #include "i_system.h"
 #include "doommenu.h"
@@ -64,22 +64,27 @@
 #include "gameconfigfile.h"
 #include "d_player.h"
 #include "teaminfo.h"
+#include "i_time.h"
+#include "shiftstate.h"
+#include "s_music.h"
+#include "hwrenderer/scene/hw_drawinfo.h"
 
 EXTERN_CVAR(Int, cl_gfxlocalization)
 EXTERN_CVAR(Bool, m_quickexit)
 EXTERN_CVAR(Bool, saveloadconfirmation) // [mxd]
 EXTERN_CVAR(Bool, quicksaverotation)
 EXTERN_CVAR(Bool, show_messages)
+EXTERN_CVAR(Float, hud_scalefactor)
 
 CVAR(Bool, m_simpleoptions, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
 typedef void(*hfunc)();
 DMenu* CreateMessageBoxMenu(DMenu* parent, const char* message, int messagemode, bool playsound, FName action = NAME_None, hfunc handler = nullptr);
 bool OkForLocalization(FTextureID texnum, const char* substitute);
-void I_WaitVBL(int count);
 
 
 FNewGameStartup NewGameStartupInfo;
+int LastSkill = -1;
 
 
 bool M_SetSpecialMenu(FName& menu, int param)
@@ -146,6 +151,7 @@ bool M_SetSpecialMenu(FName& menu, int param)
 	{
 		// sent from the skill menu for a skill that needs to be confirmed
 		NewGameStartupInfo.Skill = param;
+		LastSkill = param;
 
 		const char *msg = AllSkills[param].MustConfirmText;
 		if (*msg==0) msg = GStrings("NIGHTMARE");
@@ -156,6 +162,7 @@ bool M_SetSpecialMenu(FName& menu, int param)
 	case NAME_Startgame:
 		// sent either from skill menu or confirmation screen. Skill gets only set if sent from skill menu
 		// Now we can finally start the game. Ugh...
+		LastSkill = param;
 		NewGameStartupInfo.Skill = param;
 		[[fallthrough]];
 	case NAME_StartgameConfirmed:
@@ -201,6 +208,10 @@ bool M_SetSpecialMenu(FName& menu, int param)
 		menu = NAME_Optionsmenu;
 		break;
 
+	case NAME_Readthismenu:
+		// [MK] allow us to override the ReadThisMenu class
+		menu = gameinfo.HelpMenuClass;
+		break;
 	}
 
 	DMenuDescriptor** desc = MenuDescriptors.CheckKey(menu);
@@ -224,7 +235,7 @@ bool M_SetSpecialMenu(FName& menu, int param)
 //
 //=============================================================================
 
-void M_StartControlPanel(bool makeSound, bool scaleoverride)
+void OnMenuOpen(bool makeSound)
 {
 	if (hud_toggled)
 		D_ToggleHud();
@@ -239,7 +250,6 @@ void M_StartControlPanel(bool makeSound, bool scaleoverride)
 	{
 		S_Sound(CHAN_VOICE, CHANF_UI, "menu/activate", snd_menuvolume, ATTN_NONE);
 	}
-	M_DoStartControlPanel(scaleoverride);
 }
 
 
@@ -285,6 +295,14 @@ void System_M_Dim()
 }
 
 
+static void M_Quit()
+{
+	S_StopAllChannels();
+	S_StopMusic(true);
+	CleanSWDrawer();
+	ST_Endoom();
+}
+
 //=============================================================================
 //
 //
@@ -295,7 +313,7 @@ CCMD (menu_quit)
 {	// F10
 	if (m_quickexit)
 	{
-		ST_Endoom();
+		M_Quit();
 	}
 
 	M_StartControlPanel (true);
@@ -326,7 +344,7 @@ CCMD (menu_quit)
 				I_WaitVBL(105);
 			}
 		}
-		ST_Endoom();
+		M_Quit();
 	});
 
 
@@ -494,14 +512,28 @@ EXTERN_CVAR (Int, screenblocks)
 
 CCMD (sizedown)
 {
-	screenblocks = screenblocks - 1;
+	if (shiftState.ShiftPressed())
+	{
+		hud_scalefactor = hud_scalefactor - 0.04f;
+	}
+	else
+	{
+		screenblocks = screenblocks - 1;
+	}
 	S_Sound (CHAN_VOICE, CHANF_UI, "menu/change", snd_menuvolume, ATTN_NONE);
 }
 
 CCMD (sizeup)
 {
-	screenblocks = screenblocks + 1;
-	S_Sound (CHAN_VOICE, CHANF_UI, "menu/change", snd_menuvolume, ATTN_NONE);
+	if (shiftState.ShiftPressed())
+	{
+		hud_scalefactor = hud_scalefactor + 0.04f;
+	}
+	else
+	{
+		screenblocks = screenblocks + 1;
+	}
+	S_Sound(CHAN_VOICE, CHANF_UI, "menu/change", snd_menuvolume, ATTN_NONE);
 }
 
 CCMD(reset2defaults)
@@ -568,12 +600,25 @@ void M_StartupEpisodeMenu(FNewGameStartup *gs)
 				if (y < topy) topy = y;
 			}
 
-			// center the menu on the screen if the top space is larger than the bottom space
-			int totalheight = posy + AllEpisodes.Size() * ld->mLinespacing - topy;
-
-			if (totalheight < 190 || AllEpisodes.Size() == 1)
+			int spacing = ld->mLinespacing;
+			for (unsigned i = 0; i < AllEpisodes.Size(); i++)
 			{
-				int newtop = (200 - totalheight) / 2;
+				if (AllEpisodes[i].mPicName.IsNotEmpty())
+				{
+					FTextureID tex = GetMenuTexture(AllEpisodes[i].mPicName);
+					if (AllEpisodes[i].mEpisodeName.IsEmpty() || OkForLocalization(tex, AllEpisodes[i].mEpisodeName))
+						continue;
+				}
+				if ((gameinfo.gametype & GAME_DoomStrifeChex) && spacing == 16) spacing = 18;
+				break;
+			}
+
+			// center the menu on the screen if the top space is larger than the bottom space
+			int totalheight = posy + AllEpisodes.Size() * spacing - topy;
+
+			if (ld->mForceList || totalheight < 190 || AllEpisodes.Size() == 1)
+			{
+				int newtop = max(10, 200 - totalheight) / 2;
 				int topdelta = newtop - topy;
 				if (topdelta < 0)
 				{
@@ -600,7 +645,7 @@ void M_StartupEpisodeMenu(FNewGameStartup *gs)
 					if (*c == '$') c = GStrings(c + 1);
 					int textwidth = ld->mFont->StringWidth(c);
 					int textright = posx + textwidth;
-					if (posx + textright > 320) posx = std::max(0, 320 - textright);
+					if (posx + textright > 320) posx = max(0, 320 - textright);
 				}
 
 				for(unsigned i = 0; i < AllEpisodes.Size(); i++)
@@ -610,15 +655,15 @@ void M_StartupEpisodeMenu(FNewGameStartup *gs)
 					{
 						FTextureID tex = GetMenuTexture(AllEpisodes[i].mPicName);
 						if (AllEpisodes[i].mEpisodeName.IsEmpty() || OkForLocalization(tex, AllEpisodes[i].mEpisodeName))
-							it = CreateListMenuItemPatch(posx, posy, ld->mLinespacing, AllEpisodes[i].mShortcut, tex, NAME_Skillmenu, i);
+							it = CreateListMenuItemPatch(posx, posy, spacing, AllEpisodes[i].mShortcut, tex, NAME_Skillmenu, i);
 					}
 					if (it == nullptr)
 					{
-						it = CreateListMenuItemText(posx, posy, ld->mLinespacing, AllEpisodes[i].mShortcut, 
+						it = CreateListMenuItemText(posx, posy, spacing, AllEpisodes[i].mShortcut, 
 							AllEpisodes[i].mEpisodeName, ld->mFont, ld->mFontColor, ld->mFontColor2, NAME_Skillmenu, i);
 					}
 					ld->mItems.Push(it);
-					posy += ld->mLinespacing;
+					posy += spacing;
 				}
 				if (AllEpisodes.Size() == 1)
 				{
@@ -649,6 +694,9 @@ void M_StartupEpisodeMenu(FNewGameStartup *gs)
 		od->mScrollTop = 0;
 		od->mIndent = 160;
 		od->mDontDim = false;
+		od->mDontBlur = false;
+		od->mAnimatedTransition = false;
+		od->mAnimated = false;
 		GC::WriteBarrier(od);
 		for(unsigned i = 0; i < AllEpisodes.Size(); i++)
 		{
@@ -715,9 +763,9 @@ static void BuildPlayerclassMenu()
 				ld->mAutoselect = ld->mItems.Push(it);
 				success = true;
 			}
-			else if (totalheight <= 190)
+			else if (ld->mForceList || totalheight <= 190)
 			{
-				int newtop = (200 - totalheight + topy) / 2;
+				int newtop = (max(10, 200 - totalheight) + topy) / 2;
 				int topdelta = newtop - topy;
 				if (topdelta < 0)
 				{
@@ -784,6 +832,9 @@ static void BuildPlayerclassMenu()
 		od->mScrollTop = 0;
 		od->mIndent = 160;
 		od->mDontDim = false;
+		od->mDontBlur = false;
+		od->mAnimatedTransition = false;
+		od->mAnimated = false;
 		od->mNetgameMessage = "$NEWGAME";
 		GC::WriteBarrier(od);
 		for (unsigned i = 0; i < PlayerClasses.Size (); i++)
@@ -1028,7 +1079,7 @@ void M_StartupSkillMenu(FNewGameStartup *gs)
 	}
 	if (MenuSkills.Size() == 0) I_Error("No valid skills for menu found. At least one must be defined.");
 
-	int defskill = DefaultSkill;
+	int defskill = LastSkill > -1? LastSkill : DefaultSkill; // use the last selected skill, if available.
 	if ((unsigned int)defskill >= MenuSkills.Size())
 	{
 		defskill = SkillIndices[(MenuSkills.Size() - 1) / 2];
@@ -1070,9 +1121,10 @@ void M_StartupSkillMenu(FNewGameStartup *gs)
 				}
 			}
 
-			if (done != restart)
+			int spacing = ld->mLinespacing;
+			//if (done != restart)
 			{
-				done = restart;
+				//done = restart;
 				ld->mSelectedItem = ld->mItems.Size() + defindex;
 
 				int posy = y;
@@ -1085,12 +1137,24 @@ void M_StartupSkillMenu(FNewGameStartup *gs)
 					if (y < topy) topy = y;
 				}
 
-				// center the menu on the screen if the top space is larger than the bottom space
-				int totalheight = posy + MenuSkills.Size() * ld->mLinespacing - topy;
-
-				if (totalheight < 190 || MenuSkills.Size() == 1)
+				for (unsigned i = 0; i < MenuSkills.Size(); i++)
 				{
-					int newtop = (200 - totalheight) / 2;
+					if (MenuSkills[i]->PicName.IsNotEmpty())
+					{
+						FTextureID tex = GetMenuTexture(MenuSkills[i]->PicName);
+						if (MenuSkills[i]->MenuName.IsEmpty() || OkForLocalization(tex, MenuSkills[i]->MenuName))
+							continue;
+					}
+					if ((gameinfo.gametype & GAME_DoomStrifeChex) && spacing == 16) spacing = 18;
+					break;
+				}
+
+				// center the menu on the screen if the top space is larger than the bottom space
+				int totalheight = posy + MenuSkills.Size() * spacing - topy;
+
+				if (ld->mForceList || totalheight < 190 || MenuSkills.Size() == 1)
+				{
+					int newtop = max(10, 200 - totalheight) / 2;
 					int topdelta = newtop - topy;
 					if (topdelta < 0)
 					{
@@ -1131,7 +1195,7 @@ void M_StartupSkillMenu(FNewGameStartup *gs)
 				if (*c == '$') c = GStrings(c + 1);
 				int textwidth = ld->mFont->StringWidth(c);
 				int textright = posx + textwidth;
-				if (posx + textright > 320) posx = std::max(0, 320 - textright);
+				if (posx + textright > 320) posx = max(0, 320 - textright);
 			}
 
 			unsigned firstitem = ld->mItems.Size();
@@ -1154,16 +1218,16 @@ void M_StartupSkillMenu(FNewGameStartup *gs)
 				{
 					FTextureID tex = GetMenuTexture(skill.PicName);
 					if (skill.MenuName.IsEmpty() || OkForLocalization(tex, skill.MenuName))
-						li = CreateListMenuItemPatch(posx, y, ld->mLinespacing, skill.Shortcut, tex, action, SkillIndices[i]);
+						li = CreateListMenuItemPatch(posx, y, spacing, skill.Shortcut, tex, action, SkillIndices[i]);
 				}
 				if (li == nullptr)
 				{
-					li = CreateListMenuItemText(posx, y, ld->mLinespacing, skill.Shortcut,
+					li = CreateListMenuItemText(posx, y, spacing, skill.Shortcut,
 									pItemText? *pItemText : skill.MenuName, ld->mFont, color,ld->mFontColor2, action, SkillIndices[i]);
 				}
 				ld->mItems.Push(li);
 				GC::WriteBarrier(*desc, li);
-				y += ld->mLinespacing;
+				y += spacing;
 			}
 			if (AllEpisodes[gs->Episode].mNoSkill || MenuSkills.Size() == 1)
 			{
@@ -1194,6 +1258,9 @@ fail:
 		od->mScrollTop = 0;
 		od->mIndent = 160;
 		od->mDontDim = false;
+		od->mDontBlur = false;
+		od->mAnimatedTransition = false;
+		od->mAnimated = false;
 		GC::WriteBarrier(od);
 	}
 	else
@@ -1271,7 +1338,17 @@ void SetDefaultMenuColors()
 	OptionSettings.mFontColorHighlight = V_FindFontColor(gameinfo.mFontColorHighlight);
 	OptionSettings.mFontColorSelection = V_FindFontColor(gameinfo.mFontColorSelection);
 
-	auto cls = PClass::FindClass("DoomMenuDelegate");
+	auto cls = PClass::FindClass(gameinfo.HelpMenuClass);
+	if (!cls)
+		I_FatalError("%s: Undefined help menu class", gameinfo.HelpMenuClass.GetChars());
+	if (!cls->IsDescendantOf(RUNTIME_CLASS(DMenu)))
+		I_FatalError("'%s' does not inherit from Menu", gameinfo.HelpMenuClass.GetChars());
+
+	cls = PClass::FindClass(gameinfo.MenuDelegateClass);
+	if (!cls)
+		I_FatalError("%s: Undefined menu delegate class", gameinfo.MenuDelegateClass.GetChars());
+	if (!cls->IsDescendantOf("MenuDelegateBase"))
+		I_FatalError("'%s' does not inherit from MenuDelegateBase", gameinfo.MenuDelegateClass.GetChars());
 	menuDelegate = cls->CreateNew();
 }
 
@@ -1400,32 +1477,4 @@ CCMD (menu_video)
 {
 	M_StartControlPanel (true);
 	M_SetMenu(NAME_VideoModeMenu, -1);
-}
-
-
-#ifdef _WIN32
-EXTERN_CVAR(Bool, vr_enable_quadbuffered)
-#endif
-
-void UpdateVRModes(bool considerQuadBuffered)
-{
-	FOptionValues** pVRModes = OptionValues.CheckKey("VRMode");
-	if (pVRModes == nullptr) return;
-
-	TArray<FOptionValues::Pair>& vals = (*pVRModes)->mValues;
-	TArray<FOptionValues::Pair> filteredValues;
-	int cnt = vals.Size();
-	for (int i = 0; i < cnt; ++i) {
-		auto const& mode = vals[i];
-		if (mode.Value == 7) {  // Quad-buffered stereo
-#ifdef _WIN32
-			if (!vr_enable_quadbuffered) continue;
-#else
-			continue;  // Remove quad-buffered option on Mac and Linux
-#endif
-			if (!considerQuadBuffered) continue;  // Probably no compatible screen mode was found
-		}
-		filteredValues.Push(mode);
-	}
-	vals = filteredValues;
 }

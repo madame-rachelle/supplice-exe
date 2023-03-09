@@ -69,11 +69,13 @@
 #include "s_music.h"
 #include "texturemanager.h"
 #include "v_draw.h"
+#include "d_main.h"
+#include "savegamemanager.h"
 
 extern FILE *Logfile;
 extern bool insave;
 
-CVAR (Bool, sv_cheats, false, CVAR_SERVERINFO | CVAR_LATCH)
+CVAR (Bool, sv_cheats, false, CVAR_SERVERINFO)
 CVAR (Bool, sv_unlimited_pickup, false, CVAR_SERVERINFO)
 CVAR (Int, cl_blockcheats, 0, 0)
 
@@ -361,7 +363,18 @@ CCMD (changemap)
 	if (argv.argc() > 1)
 	{
 		const char *mapname = argv[1];
-		if (!strcmp(mapname, "*")) mapname = primaryLevel->MapName.GetChars();
+		if (!strcmp(mapname, "*"))
+		{
+			mapname = primaryLevel->MapName.GetChars();
+		}
+		else if (!strcmp(mapname, "+") && primaryLevel->NextMap.Len() > 0 && primaryLevel->NextMap.Compare("enDSeQ", 6))
+		{
+			mapname = primaryLevel->NextMap.GetChars();
+		}
+		else if (!strcmp(mapname, "+$") && primaryLevel->NextSecretMap.Len() > 0 && primaryLevel->NextSecretMap.Compare("enDSeQ", 6))
+		{
+			mapname = primaryLevel->NextSecretMap.GetChars();
+		}
 
 		try
 		{
@@ -458,7 +471,7 @@ CCMD (puke)
 			return;
 		}
 		int arg[4] = { 0, 0, 0, 0 };
-		int argn = MIN<int>(argc - 2, countof(arg)), i;
+		int argn = min<int>(argc - 2, countof(arg)), i;
 
 		for (i = 0; i < argn; ++i)
 		{
@@ -505,7 +518,7 @@ CCMD (pukename)
 				always = true;
 				argstart = 3;
 			}
-			argn = MIN<int>(argc - argstart, countof(arg));
+			argn = min<int>(argc - argstart, countof(arg));
 			for (i = 0; i < argn; ++i)
 			{
 				arg[i] = atoi(argv[argstart + i]);
@@ -621,8 +634,27 @@ UNSAFE_CCMD (load)
 		return;
 	}
 	FString fname = argv[1];
-	DefaultExtension (fname, "." SAVEGAME_EXT);
-    G_LoadGame (fname);
+	FixPathSeperator(fname);
+	if (fname[0] == '/')
+	{
+		Printf("saving to an absolute path is not allowed\n");
+		return;
+	}
+	if (fname.IndexOf("..") > 0)
+	{
+		Printf("'..' not allowed in file names\n");
+		return;
+	}
+#ifdef _WIN32
+	// block all invalid characters for Windows file names
+	if (fname.IndexOfAny(":?*<>|") >= 0)
+	{
+		Printf("file name contains invalid characters\n");
+		return;
+	}
+#endif
+	fname = G_BuildSaveName(fname);
+	G_LoadGame (fname);
 }
 
 //==========================================================================
@@ -633,15 +665,34 @@ UNSAFE_CCMD (load)
 //
 //==========================================================================
 
-UNSAFE_CCMD (save)
+UNSAFE_CCMD(save)
 {
-    if (argv.argc() < 2 || argv.argc() > 3)
+	if (argv.argc() < 2 || argv.argc() > 3 || argv[1][0] == 0)
 	{
         Printf ("usage: save <filename> [description]\n");
         return;
     }
-    FString fname = argv[1];
-	DefaultExtension (fname, "." SAVEGAME_EXT);
+	FString fname = argv[1];
+	FixPathSeperator(fname);
+	if (fname[0] == '/')
+	{
+		Printf("saving to an absolute path is not allowed\n");
+		return;
+	}
+	if (fname.IndexOf("..") > 0)
+	{
+		Printf("'..' not allowed in file names\n");
+		return;
+	}
+#ifdef _WIN32
+	// block all invalid characters for Windows file names
+	if (fname.IndexOfAny(":?*<>|") >= 0)
+	{
+		Printf("file name contains invalid characters\n");
+		return;
+	}
+#endif
+    fname = G_BuildSaveName(fname);
 	G_SaveGame (fname, argv.argc() > 2 ? argv[2] : argv[1]);
 }
 
@@ -930,8 +981,8 @@ CCMD(currentpos)
 	AActor *mo = players[consoleplayer].mo;
 	if(mo)
 	{
-		Printf("Current player position: (%1.3f,%1.3f,%1.3f), angle: %1.3f, floorheight: %1.3f, sector:%d, lightlevel: %d\n",
-			mo->X(), mo->Y(), mo->Z(), mo->Angles.Yaw.Normalized360().Degrees, mo->floorz, mo->Sector->sectornum, mo->Sector->lightlevel);
+		Printf("Current player position: (%1.3f,%1.3f,%1.3f), angle: %1.3f, floorheight: %1.3f, sector:%d, sector lightlevel: %d, actor lightlevel: %d\n",
+			mo->X(), mo->Y(), mo->Z(), mo->Angles.Yaw.Normalized360().Degrees(), mo->floorz, mo->Sector->sectornum, mo->Sector->lightlevel, mo->LightLevel);
 	}
 	else
 	{
@@ -1012,10 +1063,10 @@ CCMD(secret)
 	maphdr.Format("[%s]", mapname);
 
 	FString linebuild;
-	char readbuffer[1024];
+	char readbuffer[10240];
 	bool inlevel = false;
 
-	while (lump.Gets(readbuffer, 1024))
+	while (lump.Gets(readbuffer, 10240))
 	{
 		if (!inlevel)
 		{
@@ -1062,7 +1113,7 @@ CCMD(angleconvtest)
 	Printf("Testing degrees to angle conversion:\n");
 	for (double ang = -5 * 180.; ang < 5 * 180.; ang += 45.)
 	{
-		unsigned ang1 = DAngle(ang).BAMs();
+		unsigned ang1 = DAngle::fromDeg(ang).BAMs();
 		unsigned ang2 = (unsigned)(ang * (0x40000000 / 90.));
 		unsigned ang3 = (unsigned)(int)(ang * (0x40000000 / 90.));
 		Printf("Angle = %.5f: xs_RoundToInt = %08x, unsigned cast = %08x, signed cast = %08x\n",
@@ -1103,7 +1154,7 @@ CCMD(idmus)
 	FString map;
 	int l;
 
-	if (!nomusic)
+	if (MusicEnabled())
 	{
 		if (argv.argc() > 1)
 		{

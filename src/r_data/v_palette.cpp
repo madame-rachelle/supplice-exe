@@ -34,7 +34,7 @@
 
 #include "g_level.h"
 
-#include "templates.h"
+
 #include "v_video.h"
 #include "filesystem.h"
 #include "i_video.h"
@@ -55,7 +55,7 @@ void InitPalette ()
 	
 	ReadPalette(fileSystem.GetNumForName("PLAYPAL"), pal);
 
-	GPalette.Init(NUM_TRANSLATION_TABLES);
+	GPalette.Init(NUM_TRANSLATION_TABLES, nullptr);
 	GPalette.SetPalette (pal, -1);
 
 	int lump = fileSystem.CheckNumForName("COLORMAP");
@@ -82,37 +82,5 @@ void InitPalette ()
 	R_InitColormaps ();
 	BuildTransTable (GPalette.BaseColors);
 
-}
-
-CCMD (testblend)
-{
-	FString colorstring;
-	int color;
-	float amt;
-
-	if (argv.argc() < 3)
-	{
-		Printf ("testblend <color> <amount>\n");
-	}
-	else
-	{
-		if ( !(colorstring = V_GetColorStringByName (argv[1])).IsEmpty() )
-		{
-			color = V_GetColorFromString (NULL, colorstring);
-		}
-		else
-		{
-			color = V_GetColorFromString (NULL, argv[1]);
-		}
-		amt = (float)atof (argv[2]);
-		if (amt > 1.0f)
-			amt = 1.0f;
-		else if (amt < 0.0f)
-			amt = 0.0f;
-		BaseBlendR = RPART(color);
-		BaseBlendG = GPART(color);
-		BaseBlendB = BPART(color);
-		BaseBlendA = amt;
-	}
 }
 
