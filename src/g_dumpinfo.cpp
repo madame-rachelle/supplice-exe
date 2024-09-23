@@ -129,7 +129,7 @@ CCMD (spray)
 		return;
 	}
 	
-	Net_WriteByte (DEM_SPRAY);
+	Net_WriteInt8 (DEM_SPRAY);
 	Net_WriteString (argv[1]);
 }
 
@@ -361,20 +361,29 @@ CCMD(targetinv)
 
 CCMD(listmaps)
 {
+	int iwadNum = fileSystem.GetIwadNum();
+
 	for (unsigned i = 0; i < wadlevelinfos.Size(); i++)
 	{
 		level_info_t *info = &wadlevelinfos[i];
-		MapData *map = P_OpenMapData(info->MapName, true);
+		MapData *map = P_OpenMapData(info->MapName.GetChars(), true);
 
 		if (map != NULL)
 		{
+			int mapWadNum = fileSystem.GetFileContainer(map->lumpnum);
+
 			if (argv.argc() == 1 
 			    || CheckWildcards(argv[1], info->MapName.GetChars()) 
 			    || CheckWildcards(argv[1], info->LookupLevelName().GetChars())
-			    || CheckWildcards(argv[1], fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum))))
+			    || CheckWildcards(argv[1], fileSystem.GetResourceFileName(mapWadNum)))
 			{
-				Printf("%s: '%s' (%s)\n", info->MapName.GetChars(), info->LookupLevelName().GetChars(),
-					fileSystem.GetResourceFileName(fileSystem.GetFileContainer(map->lumpnum)));
+				bool isFromPwad = mapWadNum != iwadNum;
+
+				const char* lineColor = isFromPwad ? TEXTCOLOR_LIGHTBLUE : "";
+
+				Printf("%s%s: '%s' (%s)\n", lineColor, info->MapName.GetChars(),
+					info->LookupLevelName().GetChars(),
+					fileSystem.GetResourceFileName(mapWadNum));
 			}
 			delete map;
 		}

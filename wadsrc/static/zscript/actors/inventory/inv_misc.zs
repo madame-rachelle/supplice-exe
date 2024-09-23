@@ -33,10 +33,14 @@ class Key : Inventory
 	Default
 	{
 		+DONTGIB;		// Don't disappear due to a crusher
+		+INVENTORY.ISKEYITEM;
 		Inventory.InterHubAmount 0;
 		Inventory.PickupSound "misc/k_pkup";
 	}
 
+	static native clearscope bool IsLockDefined(int locknum);
+	static native clearscope Color GetMapColorForLock(int locknum);
+	static native clearscope Color GetMapColorForKey(Key key);
 	static native clearscope int GetKeyTypeCount();
 	static native clearscope class<Key> GetKeyType(int index);
 	
@@ -102,6 +106,7 @@ class PuzzleItem : Inventory
 	{
 		+NOGRAVITY
 		+INVENTORY.INVBAR
+		+INVENTORY.ISKEYITEM
 		Inventory.DefMaxAmount;
 		Inventory.UseSound "PuzzleSuccess";
 		Inventory.PickupSound "misc/i_pkup";

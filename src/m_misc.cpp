@@ -74,7 +74,7 @@ CVAR(String, screenshot_type, "png", CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 CVAR(String, screenshot_dir, "", CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 EXTERN_CVAR(Bool, longsavemessages);
 
-static long ParseCommandLine (const char *args, int *argc, char **argv);
+static size_t ParseCommandLine (const char *args, int *argc, char **argv);
 
 
 //---------------------------------------------------------------------------
@@ -98,10 +98,9 @@ void M_FindResponseFile (void)
 		else
 		{
 			char	**argv;
-			TArray<uint8_t> file;
+			FileSys::FileData file;
 			int		argc = 0;
-			int 	size;
-			long	argsize = 0;
+			size_t	argsize = 0;
 			int 	index;
 
 			// Any more response files after the limit will be removed from the
@@ -117,10 +116,8 @@ void M_FindResponseFile (void)
 				else
 				{
 					Printf ("Found response file %s!\n", Args->GetArg(i) + 1);
-					size = (int)fr.GetLength();
-					file = fr.Read (size);
-					file[size] = 0;
-					argsize = ParseCommandLine ((char*)file.Data(), &argc, NULL);
+					file = fr.ReadPadded(1);
+					argsize = ParseCommandLine (file.string(), &argc, nullptr);
 				}
 			}
 			else
@@ -132,7 +129,7 @@ void M_FindResponseFile (void)
 			{
 				argv = (char **)M_Malloc (argc*sizeof(char *) + argsize);
 				argv[0] = (char *)argv + argc*sizeof(char *);
-				ParseCommandLine ((char*)file.Data(), NULL, argv);
+				ParseCommandLine (file.string(), nullptr, argv);
 
 				// Create a new argument vector
 				FArgs *newargs = new FArgs;
@@ -179,17 +176,19 @@ void M_FindResponseFile (void)
 // This is just like the version in c_dispatch.cpp, except it does not
 // do cvar expansion.
 
-static long ParseCommandLine (const char *args, int *argc, char **argv)
+static size_t ParseCommandLine (const char *args, int *argc, char **argv)
 {
 	int count;
+	char* buffstart;
 	char *buffplace;
 
 	count = 0;
-	buffplace = NULL;
+	buffstart = NULL;
 	if (argv != NULL)
 	{
-		buffplace = argv[0];
+		buffstart = argv[0];
 	}
+	buffplace = buffstart;
 
 	for (;;)
 	{
@@ -257,7 +256,7 @@ static long ParseCommandLine (const char *args, int *argc, char **argv)
 	{
 		*argc = count;
 	}
-	return (long)(buffplace - (char *)0);
+	return (buffplace - buffstart);
 }
 
 
@@ -279,7 +278,7 @@ bool M_SaveDefaults (const char *filename)
 	GameConfig->ArchiveGlobalData ();
 	if (gameinfo.ConfigName.IsNotEmpty())
 	{
-		GameConfig->ArchiveGameData (gameinfo.ConfigName);
+		GameConfig->ArchiveGameData (gameinfo.ConfigName.GetChars());
 	}
 	success = GameConfig->WriteConfigFile ();
 	if (filename != nullptr)
@@ -316,7 +315,7 @@ UNSAFE_CCMD (writeini)
 CCMD(openconfig)
 {
 	M_SaveDefaults(nullptr);
-	I_OpenShellFolder(ExtractFilePath(GameConfig->GetPathName()));
+	I_OpenShellFolder(ExtractFilePath(GameConfig->GetPathName()).GetChars());
 }
 
 //
@@ -535,7 +534,7 @@ static bool FindFreeName (FString &fullname, const char *extension)
 
 	for (i = 0; i <= 9999; i++)
 	{
-		const char *gamename = gameinfo.ConfigName;
+		const char *gamename = gameinfo.ConfigName.GetChars();
 
 		time_t now;
 		tm *tm;
@@ -599,8 +598,8 @@ void M_ScreenShot (const char *filename)
 				autoname += '/';
 			}
 		}
-		autoname = NicePath(autoname);
-		CreatePath(autoname);
+		autoname = NicePath(autoname.GetChars());
+		CreatePath(autoname.GetChars());
 		if (!FindFreeName (autoname, writepcx ? "pcx" : "png"))
 		{
 			Printf ("M_ScreenShot: Delete some screenshots\n");
@@ -621,7 +620,7 @@ void M_ScreenShot (const char *filename)
 	auto buffer = screen->GetScreenshotBuffer(pitch, color_type, gamma);
 	if (buffer.Size() > 0)
 	{
-		file = FileWriter::Open(autoname);
+		file = FileWriter::Open(autoname.GetChars());
 		if (file == NULL)
 		{
 			Printf ("Could not open %s\n", autoname.GetChars());
@@ -685,9 +684,9 @@ CCMD(openscreenshots)
 			autoname += '/';
 		}
 	}
-	autoname = NicePath(autoname);
+	autoname = NicePath(autoname.GetChars());
 
-	CreatePath(autoname);
+	CreatePath(autoname.GetChars());
 
 	I_OpenShellFolder(autoname.GetChars());
 }

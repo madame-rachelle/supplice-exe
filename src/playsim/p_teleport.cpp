@@ -60,7 +60,7 @@ void P_SpawnTeleportFog(AActor *mobj, const DVector3 &pos, bool beforeTele, bool
 	else
 	{
 		double fogDelta = mobj->flags & MF_MISSILE ? 0 : TELEFOGHEIGHT;
-		mo = Spawn(mobj->Level, (beforeTele ? mobj->TeleFogSourceType : mobj->TeleFogDestType), DVector3(pos, pos.Z + fogDelta), ALLOW_REPLACE);
+		mo = Spawn(mobj->Level, (beforeTele ? mobj->TeleFogSourceType : mobj->TeleFogDestType), pos.plusZ(fogDelta), ALLOW_REPLACE);
 	}
 
 	if (mo != NULL && setTarget)
@@ -128,7 +128,15 @@ bool P_Teleport (AActor *thing, DVector3 pos, DAngle angle, int flags)
 			}
 			else
 			{
-				pos.Z = floorheight;
+				if (!(thing->Level->i_compatflags2 & COMPATF2_FDTELEPORT) || !(flags & TELF_FDCOMPAT) || floorheight > thing->Z())
+				{
+					pos.Z = floorheight;
+				}
+				else
+				{
+					pos.Z = thing->Z();
+				}
+
 				if (!(flags & TELF_KEEPORIENTATION))
 				{
 					resetpitch = false;
@@ -145,7 +153,16 @@ bool P_Teleport (AActor *thing, DVector3 pos, DAngle angle, int flags)
 		}
 		else
 		{
-			pos.Z = floorheight;
+			// emulation of Final Doom's teleport glitch.
+			// For walking monsters we still have to force them to the ground because the handling of off-ground monsters is different from vanilla.
+			if (!(thing->Level->i_compatflags2 & COMPATF2_FDTELEPORT) || !(flags & TELF_FDCOMPAT) || !(thing->flags & MF_NOGRAVITY) || floorheight > pos.Z)
+			{
+				pos.Z = floorheight;
+			}
+			else
+			{
+				pos.Z = thing->Z();
+			}
 		}
 	}
 	// [MK] notify thing of incoming teleport, check for an early cancel
@@ -245,7 +262,7 @@ DEFINE_ACTION_FUNCTION(AActor, Teleport)
 	PARAM_FLOAT(z);
 	PARAM_ANGLE(an);
 	PARAM_INT(flags);
-	ACTION_RETURN_BOOL(P_Teleport(self, DVector3(x, y, z), an, flags));
+	ACTION_RETURN_BOOL(P_Teleport(self, DVector3(x, y, z), an, flags & ~TELF_FDCOMPAT));
 }
 
 //-----------------------------------------------------------------------------
@@ -414,7 +431,7 @@ bool FLevelLocals::EV_Teleport (int tid, int tag, line_t *line, int side, AActor
 	{
 		badangle = DAngle::fromDeg(0.01);
 	}
-	if (P_Teleport (thing, DVector3(searcher->Pos(), z), searcher->Angles.Yaw + badangle, flags))
+	if (P_Teleport (thing, DVector3(searcher->Pos().XY(), z), searcher->Angles.Yaw + badangle, flags))
 	{
 		// [RH] Lee Killough's changes for silent teleporters from BOOM
 		if (line)
@@ -658,7 +675,7 @@ bool FLevelLocals::EV_TeleportOther (int other_tid, int dest_tid, bool fog)
 bool DoGroupForOne (AActor *victim, AActor *source, AActor *dest, bool floorz, bool fog)
 {
 	DAngle an = dest->Angles.Yaw - source->Angles.Yaw;
-	DVector2 off = victim->Pos() - source->Pos();
+	DVector2 off = victim->Pos().XY() - source->Pos().XY();
 	DAngle offAngle = victim->Angles.Yaw - source->Angles.Yaw;
 	DVector2 newp = { off.X * an.Cos() - off.Y * an.Sin(), off.X * an.Sin() + off.Y * an.Cos() };
 	double z = floorz ? ONFLOORZ : dest->Z() + victim->Z() - source->Z();

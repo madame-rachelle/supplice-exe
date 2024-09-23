@@ -47,6 +47,7 @@
 #include "v_text.h"
 #include "vm.h"
 #include "i_interface.h"
+#include "r_videoscale.h"
 
 FGameTexture* CrosshairImage;
 static int CrosshairNum;
@@ -124,7 +125,7 @@ void ST_UnloadCrosshair()
 //
 //---------------------------------------------------------------------------
 
-void ST_DrawCrosshair(int phealth, double xpos, double ypos, double scale)
+void ST_DrawCrosshair(int phealth, double xpos, double ypos, double scale, DAngle angle)
 {
 	uint32_t color;
 	double size;
@@ -207,6 +208,7 @@ void ST_DrawCrosshair(int phealth, double xpos, double ypos, double scale)
 		xpos, ypos,
 		DTA_DestWidth, w,
 		DTA_DestHeight, h,
+		DTA_Rotate, angle.Degrees(),
 		DTA_AlphaChannel, true,
 		DTA_FillColor, color & 0xFFFFFF,
 		TAG_DONE);
@@ -366,9 +368,11 @@ void DStatusBarCore::SetScale()
 	double screenaspect = w / double(h);
 	double aspectscale = 1.0;
 
+	const double ViewportAspect = 1. / ViewportPixelAspect();
+
 	if ((horz == 320 && vert == 200) || (horz == 640 && vert == 400))
 	{
-		refaspect = 1.333;
+		refaspect = (4. / 3.);
 		if (!hud_aspectscale) aspectscale = 1 / 1.2;
 	}
 
@@ -383,9 +387,9 @@ void DStatusBarCore::SetScale()
 		refw = h * refaspect;
 	}
 	refw *= hud_scalefactor;
-	refh *= hud_scalefactor * aspectscale;
+	refh *= hud_scalefactor * aspectscale * ViewportAspect;
 
-	int sby = vert - int(RelTop * hud_scalefactor * aspectscale);
+	int sby = vert - int(RelTop * hud_scalefactor * aspectscale * ViewportAspect);
 	// Use full pixels for destination size.
 
 	ST_X = xs_CRoundToInt((w - refw) / 2);
@@ -597,7 +601,7 @@ void DStatusBarCore::DrawGraphic(FGameTexture* tex, double x, double y, int flag
 		DTA_ClipBottom, twod->GetHeight(),
 		DTA_ClipRight, clipwidth < 0? twod->GetWidth() : int(x + boxwidth * clipwidth),
 		DTA_Color, color,
-		DTA_TranslationIndex, translation? translation : (flags & DI_TRANSLATABLE) ? GetTranslation() : 0,
+		DTA_TranslationIndex, translation? translation : (flags & DI_TRANSLATABLE) ? GetTranslation().index() : 0,
 		DTA_ColorOverlay, (flags & DI_DIM) ? MAKEARGB(170, 0, 0, 0) : 0,
 		DTA_Alpha, Alpha,
 		DTA_AlphaChannel, !!(flags & DI_ALPHAMAPPED),
@@ -682,7 +686,7 @@ void DStatusBarCore::DrawRotated(FGameTexture* tex, double x, double y, int flag
 		DTA_Color, color,
 		DTA_CenterOffsetRel, !!(flags & DI_ITEM_RELCENTER),
 		DTA_Rotate, angle,
-		DTA_TranslationIndex, translation ? translation : (flags & DI_TRANSLATABLE) ? GetTranslation() : 0,
+		DTA_TranslationIndex, translation ? translation : (flags & DI_TRANSLATABLE) ? GetTranslation().index() : 0,
 		DTA_ColorOverlay, (flags & DI_DIM) ? MAKEARGB(170, 0, 0, 0) : 0,
 		DTA_Alpha, Alpha,
 		DTA_AlphaChannel, !!(flags & DI_ALPHAMAPPED),
@@ -700,7 +704,7 @@ void DStatusBarCore::DrawRotated(FGameTexture* tex, double x, double y, int flag
 //
 //============================================================================
 
-void DStatusBarCore::DrawString(FFont* font, const FString& cstring, double x, double y, int flags, double Alpha, int translation, int spacing, EMonospacing monospacing, int shadowX, int shadowY, double scaleX, double scaleY, int pt, int style)
+void DStatusBarCore::DrawString(FFont* font, const FString& cstring, double x, double y, int flags, double Alpha, int translation, int spacing, EMonospacing monospacing, int shadowX, int shadowY, double scaleX, double scaleY, FTranslationID pt, int style)
 {
 	bool monospaced = monospacing != EMonospacing::Off;
 	double dx = 0;
@@ -819,11 +823,11 @@ void DStatusBarCore::DrawString(FFont* font, const FString& cstring, double x, d
 				DTA_FillColor, 0,
 				TAG_DONE);
 		}
-		DrawChar(twod, font, pt == 0? fontcolor : CR_NATIVEPAL, rx, ry, ch,
+		DrawChar(twod, font, pt == NO_TRANSLATION? fontcolor : CR_NATIVEPAL, rx, ry, ch,
 			DTA_DestWidthF, rw,
 			DTA_DestHeightF, rh,
 			DTA_Alpha, Alpha,
-			DTA_TranslationIndex, pt,
+			DTA_TranslationIndex, pt.index(),
 			DTA_LegacyRenderStyle, ERenderStyle(style),
 			TAG_DONE);
 
@@ -836,10 +840,11 @@ void DStatusBarCore::DrawString(FFont* font, const FString& cstring, double x, d
 	}
 }
 
-void SBar_DrawString(DStatusBarCore* self, DHUDFont* font, const FString& string, double x, double y, int flags, int trans, double alpha, int wrapwidth, int linespacing, double scaleX, double scaleY, int pt, int style)
+void SBar_DrawString(DStatusBarCore* self, DHUDFont* font, const FString& string, double x, double y, int flags, int trans, double alpha, int wrapwidth, int linespacing, double scaleX, double scaleY, int pt_, int style)
 {
 	if (font == nullptr || font->mFont == nullptr) ThrowAbortException(X_READ_NIL, nullptr);
 	if (!twod->HasBegun2D()) ThrowAbortException(X_OTHER, "Attempt to draw to screen outside a draw function");
+	auto pt = FTranslationID::fromInt(pt_);
 
 	// resolve auto-alignment before making any adjustments to the position values.
 	if (!(flags & DI_SCREEN_MANUAL_ALIGN))

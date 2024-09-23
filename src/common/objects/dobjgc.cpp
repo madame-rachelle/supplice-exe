@@ -62,6 +62,7 @@
 #include "menu.h"
 #include "stats.h"
 #include "printf.h"
+#include "cmdlib.h"
 
 // MACROS ------------------------------------------------------------------
 
@@ -286,11 +287,22 @@ static size_t DestroyObjects(size_t count)
 
 	while ((curr = ToDestroy) != nullptr && count-- > 0)
 	{
-		assert(!(curr->ObjectFlags & OF_EuthanizeMe));
-		bytes_destroyed += curr->GetClass()->Size + GCDESTROYCOST;
-		ToDestroy = curr->GCNext;
-		curr->GCNext = nullptr;
-		curr->Destroy();
+		// Note that we cannot assume here that the object has not yet been destroyed.
+		// If destruction happens as the result of another object's destruction we may
+		// get entries here that have been destroyed already if that owning object was
+		// first in the list.
+		if (!(curr->ObjectFlags & OF_EuthanizeMe))
+		{
+			bytes_destroyed += curr->GetClass()->Size + GCDESTROYCOST;
+			ToDestroy = curr->GCNext;
+			curr->GCNext = nullptr;
+			curr->Destroy();
+		}
+		else
+		{
+			ToDestroy = curr->GCNext;
+			curr->GCNext = nullptr;
+		}
 	}
 	return bytes_destroyed;
 }
@@ -550,28 +562,34 @@ void Step()
 
 void FullGC()
 {
-	if (State <= GCS_Propagate)
+	bool ContinueCheck = true;
+	while (ContinueCheck)
 	{
-		// Reset sweep mark to sweep all elements (returning them to white)
-		SweepPos = &Root;
-		// Reset other collector lists
-		Gray = nullptr;
-		State = GCS_Sweep;
-	}
-	// Finish any pending GC stages
-	while (State != GCS_Pause)
-	{
-		SingleStep();
-	}
-	// Loop until everything that can be destroyed and freed is
-	do
-	{
-		MarkRoot();
+		ContinueCheck = false;
+		if (State <= GCS_Propagate)
+		{
+			// Reset sweep mark to sweep all elements (returning them to white)
+			SweepPos = &Root;
+			// Reset other collector lists
+			Gray = nullptr;
+			State = GCS_Sweep;
+		}
+		// Finish any pending GC stages
 		while (State != GCS_Pause)
 		{
 			SingleStep();
 		}
-	} while (HadToDestroy);
+		// Loop until everything that can be destroyed and freed is
+		do
+		{
+			MarkRoot();
+			while (State != GCS_Pause)
+			{
+				SingleStep();
+			}
+			ContinueCheck |= HadToDestroy;
+		} while (HadToDestroy);
+	}
 }
 
 //==========================================================================
@@ -715,7 +733,7 @@ FAveragizer::FAveragizer()
 void FAveragizer::AddAlloc(size_t alloc)
 {
 	NewestPos = (NewestPos + 1) & (HistorySize - 1);
-	if (TotalCount < HistorySize)
+	if (TotalCount < (int)HistorySize)
 	{
 		TotalCount++;
 	}

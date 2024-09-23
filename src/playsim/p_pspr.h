@@ -31,6 +31,7 @@
 #define __P_PSPR_H__
 
 #include "renderstyle.h"
+#include "palettecontainer.h"
 
 // Basic data types.
 // Needs fixed point, and BAM angles.
@@ -104,7 +105,7 @@ public:
 	int			GetSprite()						const { return Sprite; }
 	int			GetFrame()						const { return Frame; }
 	int			GetTics()						const {	return Tics; }
-	uint32_t	GetTranslation()					  { return Translation; }
+	FTranslationID	GetTranslation()					  { return Translation; }
 	FState*		GetState()						const { return State; }
 	DPSprite*	GetNext()							  { return Next; }
 	AActor*		GetCaller()							  { return Caller; }
@@ -127,7 +128,7 @@ public:
 	WeaponInterp Vert;		// Current Position
 	bool firstTic;
 	int Tics;
-	uint32_t Translation;
+	FTranslationID Translation;
 	int Flags;
 	FRenderStyle Renderstyle;
 
@@ -156,6 +157,7 @@ void P_SetPsprite(player_t *player, PSPLayers id, FState *state, bool pending = 
 void P_BringUpWeapon (player_t *player);
 void P_FireWeapon (player_t *player);
 void P_BobWeapon (player_t *player, float *x, float *y, double ticfrac);
+void P_BobWeapon3D (player_t *player, FVector3 *translation, FVector3 *rotation, double ticfrac);
 DAngle P_BulletSlope (AActor *mo, FTranslatedLineTarget *pLineTarget = NULL, int aimflags = 0);
 AActor *P_AimTarget(AActor *mo);
 

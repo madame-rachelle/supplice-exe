@@ -131,7 +131,7 @@ enum EMouseMode
 
 // PRIVATE FUNCTION PROTOTYPES ---------------------------------------------
 
-static void SetCursorState(bool visible);
+void SetCursorState(bool visible);
 static FMouse *CreateWin32Mouse();
 static FMouse *CreateDInputMouse();
 static FMouse *CreateRawMouse();
@@ -189,18 +189,28 @@ CUSTOM_CVAR (Int, in_mouse, 0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG|CVAR_NOINITCALL)
 //
 //==========================================================================
 
-static void SetCursorState(bool visible)
+static bool mouse_shown = true;
+
+void SetCursorState(bool visible)
 {
 	CursorState = visible || !m_hidepointer;
 	if (GetForegroundWindow() == mainwindow.GetHandle())
 	{
 		if (CursorState)
 		{
-			SetCursor((HCURSOR)(intptr_t)GetClassLongPtr(mainwindow.GetHandle(), GCLP_HCURSOR));
+			if(!mouse_shown)
+			{
+				ShowCursor(true);
+				mouse_shown = true;
+			}
 		}
 		else
 		{
-			SetCursor(NULL);
+			if(mouse_shown)
+			{
+				ShowCursor(false);
+				mouse_shown = false;
+			}
 		}
 	}
 }
@@ -287,6 +297,12 @@ void I_CheckNativeMouse(bool preferNative, bool eventhandlerresult)
 			{
 				BlockMouseMove = 3;
 				Mouse->Ungrab();
+
+				if(!mouse_shown)
+				{
+					ShowCursor(true);
+					mouse_shown = true;
+				}
 			}
 			else
 			{

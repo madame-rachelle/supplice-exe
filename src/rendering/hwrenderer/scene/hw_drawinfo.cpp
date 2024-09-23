@@ -48,6 +48,7 @@
 #include "a_corona.h"
 #include "texturemanager.h"
 #include "actorinlines.h"
+#include "g_levellocals.h"
 
 EXTERN_CVAR(Float, r_visibility)
 CVAR(Bool, gl_bandedswlight, false, CVAR_ARCHIVE)
@@ -138,7 +139,8 @@ void HWDrawInfo::StartScene(FRenderViewpoint &parentvp, HWViewpointUniforms *uni
 	mClipper = &staticClipper;
 
 	Viewpoint = parentvp;
-	lightmode = Level->lightMode;
+	lightmode = getRealLightmode(Level, true);
+
 	if (uniforms)
 	{
 		VPUniforms = *uniforms;
@@ -152,7 +154,7 @@ void HWDrawInfo::StartScene(FRenderViewpoint &parentvp, HWViewpointUniforms *uni
 		VPUniforms.mViewMatrix.loadIdentity();
 		VPUniforms.mNormalViewMatrix.loadIdentity();
 		VPUniforms.mViewHeight = viewheight;
-		if (gl_lightmode == 5)
+		if (lightmode == ELightMode::Build)
 		{
 			VPUniforms.mGlobVis = 1 / 64.f;
 			VPUniforms.mPalLightLevels = 32 | (static_cast<int>(gl_fogmode) << 8) | ((int)lightmode << 16);
@@ -164,6 +166,7 @@ void HWDrawInfo::StartScene(FRenderViewpoint &parentvp, HWViewpointUniforms *uni
 		}
 		VPUniforms.mClipLine.X = -10000000.0f;
 		VPUniforms.mShadowmapFilter = gl_shadowmap_filter;
+		VPUniforms.mLightBlendMode = (level.info ? (int)level.info->lightblendmode : 0);
 	}
 	mClipper->SetViewpoint(Viewpoint);
 

@@ -150,13 +150,13 @@ void DeinitMenus()
 			pair->Value = nullptr;
 		}
 	}
-	MenuDescriptors.Clear();
-	OptionValues.Clear();
 	if (menuDelegate)
 	{
 		menuDelegate->Destroy();
 		menuDelegate = nullptr;
 	}
+	MenuDescriptors.Clear();
+	OptionValues.Clear();
 }
 
 FTextureID GetMenuTexture(const char* const name)
@@ -430,6 +430,10 @@ static void DoParseListMenuBody(FScanner &sc, DListMenuDescriptor *desc, bool &s
 		else if (sc.Compare("ForceList"))
 		{
 			desc->mForceList = true;
+		}
+		else if (sc.Compare("CenterText"))
+		{
+			desc->mCenterText = true;
 		}
 		else
 		{
@@ -768,6 +772,7 @@ static void ParseListMenu(FScanner &sc)
 	desc->mWLeft = 0;
 	desc->mWRight = 0;
 	desc->mCenter = false;
+	desc->mCenterText = false;
 	desc->mFromEngine = fileSystem.GetFileContainer(sc.LumpNum) == 0;	// flags menu if the definition is from the IWAD.
 	desc->mVirtWidth = -2;
 	desc->mCustomSizeSet = false;
@@ -1519,7 +1524,7 @@ void M_ParseMenuDefs()
 	DefaultOptionMenuSettings->Reset();
 	OptionSettings.mLinespacing = 17;
 
-	int IWADMenu = fileSystem.CheckNumForName("MENUDEF", ns_global, fileSystem.GetIwadNum());
+	int IWADMenu = fileSystem.CheckNumForName("MENUDEF", FileSys::ns_global, fileSystem.GetIwadNum());
 
 	while ((lump = fileSystem.FindLump ("MENUDEF", &lastlump)) != -1)
 	{
@@ -1628,7 +1633,7 @@ static void InitMusicMenus()
 					{
 						FString display = entry.mName;
 						display.ReplaceChars("_", ' ');
-						auto it = CreateOptionMenuItemCommand(display, FStringf("%s \"%s\"", std::get<2>(p), entry.mName.GetChars()), true);
+						auto it = CreateOptionMenuItemCommand(display.GetChars(), FStringf("%s \"%s\"", std::get<2>(p), entry.mName.GetChars()), true);
 						static_cast<DOptionMenuDescriptor*>(*menu)->mItems.Push(it);
 					}
 				}
@@ -1662,6 +1667,7 @@ static void InitMusicMenus()
 // Special menus will be created once all engine data is loaded
 //
 //=============================================================================
+void I_BuildMIDIMenuList(FOptionValues*);
 
 void M_CreateMenus()
 {

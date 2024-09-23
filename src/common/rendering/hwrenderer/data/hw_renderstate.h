@@ -625,6 +625,7 @@ private:
 public:
 	void SetMaterial(FGameTexture* tex, EUpscaleFlags upscalemask, int scaleflags, int clampmode, int translation, int overrideshader)
 	{
+		tex->setSeen();
 		if (!sysCallbacks.PreBindTexture || !sysCallbacks.PreBindTexture(this, tex, upscalemask, scaleflags, clampmode, translation, overrideshader))
 		{
 			if (shouldUpscale(tex, upscalemask)) scaleflags |= CTF_Upscale;
@@ -633,6 +634,12 @@ public:
 		assert(mat);
 		SetMaterial(mat, clampmode, translation, overrideshader);
 	}
+
+	void SetMaterial(FGameTexture* tex, EUpscaleFlags upscalemask, int scaleflags, int clampmode, FTranslationID translation, int overrideshader)
+	{
+		SetMaterial(tex, upscalemask, scaleflags, clampmode, translation.index(), overrideshader);
+	}
+
 
 	void SetClipSplit(float bottom, float top)
 	{
