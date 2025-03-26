@@ -61,7 +61,7 @@ EXTERN_CVAR(String, language)
 
 CVAR(Int, i_loadsupportwad, 1, CVAR_ARCHIVE|CVAR_GLOBALCONFIG) // 0=never, 1=singleplayer only, 2=always
 
-bool foundprio = true; // global to prevent iwad box from appearing
+bool foundprio = false; // global to prevent iwad box from appearing
 
 //==========================================================================
 //
