@@ -623,11 +623,25 @@ void C_DrawConsole ()
 		if (ConBottom >= 12)
 		{
 			if (textScale == 1)
+			{
 				DrawText(twod, CurrentConsoleFont, CR_ORANGE, twod->GetWidth() - 8 -
-					CurrentConsoleFont->StringWidth (GetVersionString()),
+					CurrentConsoleFont->StringWidth(GetSuppliceVersion()),
+					ConBottom / textScale - CurrentConsoleFont->GetHeight() - 20,
+					GetSuppliceVersion(), TAG_DONE);
+				DrawText(twod, CurrentConsoleFont, CR_ORANGE, twod->GetWidth() - 8 -
+					CurrentConsoleFont->StringWidth(GetVersionString()),
 					ConBottom / textScale - CurrentConsoleFont->GetHeight() - 4,
 					GetVersionString(), TAG_DONE);
+			}
 			else
+			{
+				DrawText(twod, CurrentConsoleFont, CR_ORANGE, twod->GetWidth() / textScale - 8 -
+					CurrentConsoleFont->StringWidth(GetSuppliceVersion()),
+					ConBottom / textScale - CurrentConsoleFont->GetHeight() - 20,
+					GetSuppliceVersion(),
+					DTA_VirtualWidth, twod->GetWidth() / textScale,
+					DTA_VirtualHeight, twod->GetHeight() / textScale,
+					DTA_KeepRatio, true, TAG_DONE);
 				DrawText(twod, CurrentConsoleFont, CR_ORANGE, twod->GetWidth() / textScale - 8 -
 					CurrentConsoleFont->StringWidth(GetVersionString()),
 					ConBottom / textScale - CurrentConsoleFont->GetHeight() - 4,
@@ -635,7 +649,7 @@ void C_DrawConsole ()
 					DTA_VirtualWidth, twod->GetWidth() / textScale,
 					DTA_VirtualHeight, twod->GetHeight() / textScale,
 					DTA_KeepRatio, true, TAG_DONE);
-
+			}
 		}
 
 	}

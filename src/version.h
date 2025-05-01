@@ -38,10 +38,12 @@ const char *GetGitDescription();
 const char *GetGitHash();
 const char *GetGitTime();
 const char *GetVersionString();
+const char *GetSuppliceVersion();
 
 /** Lots of different version numbers **/
 
 #define VERSIONSTR "4.15pre"
+#define SUPPVERSIONSTR "v.0.4.0.0"
 
 // The version as seen in the Windows resource
 #define RC_FILEVERSION 4,14,9999,0

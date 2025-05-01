@@ -61,7 +61,7 @@ EXTERN_CVAR(String, language)
 
 CVAR(Int, i_loadsupportwad, 1, CVAR_ARCHIVE|CVAR_GLOBALCONFIG) // 0=never, 1=singleplayer only, 2=always
 
-bool foundprio = false; // global to prevent iwad box from appearing
+bool foundprio = true; // global to prevent iwad box from appearing
 
 //==========================================================================
 //
@@ -735,7 +735,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 	// If we still haven't found a suitable IWAD let's error out.
 	if (picks.Size() == 0)
 	{
-		I_FatalError ("Cannot find a game IWAD (doom.wad, doom2.wad, heretic.wad, etc.).\n"
+		I_FatalError ("Cannot find a game IWAD (supplice.ipk3).\n"
 					  "Did you install " GAMENAME " properly? You can do either of the following:\n"
 					  "\n"
 #if defined(_WIN32)

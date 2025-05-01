@@ -63,3 +63,8 @@ const char *GetVersionString()
 		return GIT_DESCRIPTION;
 	}
 }
+
+const char *GetSuppliceVersion()
+{
+	return SUPPVERSIONSTR;
+}
