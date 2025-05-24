@@ -155,7 +155,7 @@ IF( NOT CMAKE_BUILD_TYPE )
 ENDIF()
 
 set( ZDOOM_OUTPUT_DIR ${CMAKE_BINARY_DIR} CACHE PATH "Directory where zdoom.pk3 and the executable will be created." )
-set( ZDOOM_EXE_NAME "supplice" CACHE FILEPATH "Name of the executable to create" )
+set( ZDOOM_EXE_NAME "gzdoom" CACHE FILEPATH "Name of the executable to create" )
 if( MSVC )
 	# Allow the user to use ZDOOM_OUTPUT_DIR as a single release point.
 	# Use zdoom, zdoomd, zdoom64, and zdoomd64 for the binary names
@@ -309,7 +309,7 @@ else()
 			# If we're compiling with a custom GCC on the Mac (which we know since g++-4.2 doesn't support C++11) statically link libgcc.
 			set( ALL_C_FLAGS "-static-libgcc" )
 		endif()
-	elseif( NOT MINGW )
+	elseif( NOT MINGW AND NOT HAIKU )
 		# Generic GCC/Clang requires position independent executable to be enabled explicitly
 		set( ALL_C_FLAGS "${ALL_C_FLAGS} -fPIE" )
 		set( CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie" )
@@ -409,6 +409,10 @@ add_subdirectory( libraries/lzma )
 add_subdirectory( libraries/miniz )
 add_subdirectory( tools )
 add_subdirectory( wadsrc )
+add_subdirectory( wadsrc_bm )
+add_subdirectory( wadsrc_lights )
+add_subdirectory( wadsrc_extra )
+add_subdirectory( wadsrc_widepix )
 add_subdirectory( src )
 
 if( NOT CMAKE_CROSSCOMPILING )
