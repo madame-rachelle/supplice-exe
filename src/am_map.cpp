@@ -3232,7 +3232,8 @@ void DAutomap::drawAuthorMarkers ()
 		{
 			if (mark->args[1] == 0 || (mark->args[1] == 1 && (marked->subsector->flags & SSECMF_DRAWN)))
 			{
-				DrawMarker (tex, marked->X(), marked->Y(), 0, flip, xscale, yscale, mark->Translation,
+               	DVector2 pos = marked->InterpolatedPosition(r_viewpoint.TicFrac).XY();
+                DrawMarker (tex, pos.X, pos.Y, 0, flip, xscale, yscale, mark->Translation,
 					mark->Alpha, mark->fillcolor, mark->RenderStyle);
 			}
 			marked = mark->args[0] != 0 ? it.Next() : nullptr;
@@ -3248,7 +3249,7 @@ void DAutomap::drawAuthorMarkers ()
 
 void DAutomap::drawCrosshair (const AMColor &color)
 {
-	twod->AddPixel(f_w/2, (f_h+1)/2, color.RGB);
+	//twod->AddPixel(f_w/2, (f_h+1)/2, color.RGB);
 }
 
 //=============================================================================
