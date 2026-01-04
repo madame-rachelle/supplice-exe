@@ -650,6 +650,7 @@ void C_DrawConsole ()
 					DTA_VirtualHeight, twod->GetHeight() / textScale,
 					DTA_KeepRatio, true, TAG_DONE);
 			}
+
 		}
 
 	}

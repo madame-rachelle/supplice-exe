@@ -42,22 +42,22 @@ const char *GetSuppliceVersion();
 
 /** Lots of different version numbers **/
 
-#define VERSIONSTR "4.12.2"
-#define SUPPVERSIONSTR "v0.4.0.4"
+#define VERSIONSTR "4.14.3"
+#define SUPPVERSIONSTR "v0.4.0.6"
 
 // The version as seen in the Windows resource
-#define RC_FILEVERSION 4,14,2,0
-#define RC_PRODUCTVERSION 4,14,2,0
+#define RC_FILEVERSION 4,14,3,0
+#define RC_PRODUCTVERSION 4,14,3,0
 #define RC_PRODUCTVERSION2 VERSIONSTR
 // These are for content versioning.
 #define VER_MAJOR 4
 #define VER_MINOR 14
-#define VER_REVISION 2
+#define VER_REVISION 3
 
-// This should always refer to the GZDoom version a derived port is based on and not reflect the derived port's version number!
+// This should always refer to the UZDoom version a derived port is based on and not reflect the derived port's version number!
 #define ENG_MAJOR 4
 #define ENG_MINOR 14
-#define ENG_REVISION 2
+#define ENG_REVISION 3
 
 // Version identifier for network games.
 // Bump it every time you do a release unless you're certain you
@@ -67,7 +67,7 @@ const char *GetSuppliceVersion();
 // Version stored in the ini's [LastRun] section.
 // Bump it if you made some configuration change that you want to
 // be able to migrate in FGameConfigFile::DoGlobalSetup().
-#define LASTRUNVERSION "225"
+#define LASTRUNVERSION "228"
 
 // Protocol version used in demos.
 // Bump it if you change existing DEM_ commands or add new ones.
@@ -94,6 +94,11 @@ const char *GetSuppliceVersion();
 
 // This is so that derivates can use the same savegame versions without worrying about engine compatibility
 #define GAMESIG "SUPPLICE"
+
+#ifndef LOAD_GZDOOM_4142_SAVES
+    #define LOAD_GZDOOM_4142_SAVES 1
+#endif
+
 #define BASEWAD "supplice.pk3"
 // Set OPTIONALWAD to "" (null) to disable searching for it
 #define OPTIONALWAD "game_support.pk3"
@@ -101,9 +106,11 @@ const char *GetSuppliceVersion();
 #define VR3D_ENABLED
 
 // More stuff that needs to be different for derivatives.
+
 #define GAMENAME "Supplice"
 #define WGAMENAME L"Supplice"
-#define GAMENAMELOWERCASE "gzdoom"
+#define GAMENAMELOWERCASE "uzdoom"
+#define APPID "org.zdoom.UZDoom"
 #define QUERYIWADDEFAULT false
 #define FORUM_URL "https://steamcommunity.com/app/1693280/discussions/"
 #define BUGS_FORUM_URL	"https://steamcommunity.com/app/1693280/discussions/"
@@ -112,16 +119,15 @@ const char *GetSuppliceVersion();
 
 #if defined(__APPLE__) || defined(_WIN32)
 #define GAME_DIR GAMENAME
-#else
-#define GAME_DIR ".config/" GAMENAMELOWERCASE
+#elif defined(__HAIKU__)
+#define GAME_DIR "config/settings/" GAMENAME
 #endif
 
-#define DEFAULT_DISCORD_APP_ID "951303644597325885"
+#define DEFAULT_DISCORD_APP_ID "1428620310302691349"
 
 const int SAVEPICWIDTH = 216;
 const int SAVEPICHEIGHT = 162;
 const int VID_MIN_WIDTH = 320;
 const int VID_MIN_HEIGHT = 200;
-
 
 #endif //__VERSION_H__

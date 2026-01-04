@@ -58,7 +58,7 @@
 #pragma warning(disable: 6011) // dereference null pointer in thinker iterator
 #endif
 
-CVAR (Int, cl_rockettrails, 1, CVAR_ARCHIVE);
+CVAR (Int, cl_rockettrails, 0, CVAR_ARCHIVE);
 CVAR (Bool, r_rail_smartspiral, false, CVAR_ARCHIVE);
 CVAR (Int, r_rail_spiralsparsity, 1, CVAR_ARCHIVE);
 CVAR (Int, r_rail_trailsparsity, 1, CVAR_ARCHIVE);
@@ -1023,7 +1023,6 @@ void DVisualThinker::OnDestroy()
 		_next->_prev = _prev;
 	if (Level->VisualThinkerHead == this)
 		Level->VisualThinkerHead = _next;
-
 	_next = _prev = nullptr;
 	PT.alpha = 0.0; // stops all rendering.
 	Super::OnDestroy();
