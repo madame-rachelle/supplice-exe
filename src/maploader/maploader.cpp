@@ -2185,6 +2185,7 @@ void MapLoader::LoadSideDefs2 (MapData *map, FMissingTextureTracker &missingtex)
 		sd->SetTextureYOffset(LittleShort(msd->rowoffset));
 		sd->SetTextureXScale(1.);
 		sd->SetTextureYScale(1.);
+		sd->ClearAlpha();
 		sd->linedef = nullptr;
 		sd->Flags = 0;
 		sd->UDMFIndex = i;
@@ -3035,6 +3036,11 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 
 	CalcIndices();
 	PostProcessLevel(checksum);
+	
+	// [XA] NOTE: this function is intentionally called _after_ PostProcessLevel,
+	// that way zscript level postprocessors see the "real" values of any sidedef
+	// post-edits as defined in the source map, free of internal aliasing details.
+	Level->UpdateSidedefRenderFlags();
 
 	LoopSidedefs(true);
 

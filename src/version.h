@@ -109,7 +109,7 @@ const char *GetSuppliceVersion();
 
 #define GAMENAME "Supplice"
 #define WGAMENAME L"Supplice"
-#define GAMENAMELOWERCASE "uzdoom"
+#define GAMENAMELOWERCASE "supplice"
 #define APPID "org.zdoom.UZDoom"
 #define QUERYIWADDEFAULT false
 #define FORUM_URL "https://steamcommunity.com/app/1693280/discussions/"
