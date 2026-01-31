@@ -119,6 +119,8 @@
 #include "startscreen.h"
 #include "shiftstate.h"
 
+#include "statdb.h"
+
 #ifdef __unix__
 #include "i_system.h"  // for SHARE_DIR
 #endif // __unix__

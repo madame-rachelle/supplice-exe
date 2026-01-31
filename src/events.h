@@ -351,6 +351,9 @@ public:
 	void CheckReplacee(PClassActor** replacee, PClassActor* replacement, bool* final);
 
 	//
+	void StatsEvent(FString name, FString text, bool isAchievement, double value = 1);
+
+	//
 	void NewGame();
 };
 class DEventHandler : public DStaticEventHandler
@@ -431,6 +434,13 @@ struct FConsoleEvent
 	int Args[3];
 	//
 	bool IsManual;
+};
+
+struct FStatsEvent
+{
+	FString Name, Text;
+	bool IsAchievement;
+	double Value;
 };
 
 struct FReplaceEvent
@@ -544,6 +554,9 @@ struct EventManager
 	bool CheckReplacement(PClassActor* replacee, PClassActor** replacement);
 	// called when looking up the replaced for an actor class
 	bool CheckReplacee(PClassActor** replacee, PClassActor* replacement);
+
+	//
+	void Stat(FString name, FString text, bool isAchievement, double value);
 
 	// called on new game
 	void NewGame();
