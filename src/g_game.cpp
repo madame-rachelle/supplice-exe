@@ -1192,7 +1192,9 @@ void G_Ticker ()
 			G_DoLoadGame ();
 			break;
 		case ga_savegame:
+			staticEventManager.PreSave(0);
 			G_DoSaveGame (true, false, savegamefile, savedescription.GetChars());
+			staticEventManager.PostSave(0);
 			gameaction = ga_nothing;
 			savegamefile = "";
 			savedescription = "";
@@ -2134,6 +2136,11 @@ void G_DoLoadGame ()
 	{
 		gamestate = GS_HIDECONSOLE;
 	}
+	
+	// @Cockatrice - Retrieve the version number if it exists
+	int mapVersion = 0;
+	arc("Map Version", mapVersion);
+	
 	// we are done with info.json.
 	arc.Close();
 
@@ -2187,7 +2194,7 @@ void G_DoLoadGame ()
 
 	// load a base level
 	bool demoplaybacksave = demoplayback;
-	G_InitNew(map.GetChars(), false);
+	G_InitNew(map.GetChars(), false, mapVersion);
 	FinishLoadingCVars();
 	demoplayback = demoplaybacksave;
 	savegamerestore = false;
@@ -2310,7 +2317,9 @@ void G_DoAutoSave ()
 
 	readableTime = myasctime ();
 	description.Format("Autosave %s", readableTime);
+	staticEventManager.PreSave(2);
 	G_DoSaveGame (false, false, file, description.GetChars());
+	staticEventManager.PostSave(2);
 }
 
 void G_DoQuickSave ()
@@ -2338,7 +2347,9 @@ void G_DoQuickSave ()
 
 	readableTime = myasctime ();
 	description.Format("Quicksave %s", readableTime);
+	staticEventManager.PreSave(1);
 	G_SaveGame(file.GetChars(), description.GetChars(), true);
+	staticEventManager.PostSave(1);
 }
 
 
@@ -2353,6 +2364,7 @@ static void PutSaveWads (FSerializer &arc)
 	// Name of wad the map resides in
 	name = fileSystem.GetResourceFileName (fileSystem.GetFileContainer (primaryLevel->lumpnum));
 	arc.AddString("Map WAD", name);
+	arc("Map Version", primaryLevel->mapVersion);
 }
 
 static void PutSaveComment (FSerializer &arc)
