@@ -105,6 +105,34 @@ static int GetMapIndex(const char *mapname, int lastindex, const char *lumpname,
 	return -1;	// End of map reached
 }
 
+static int GetMaxMapVersion(FString mapname)
+{
+
+	FString fmt;
+	int lwad = -1, lname = -1, max = 0;
+
+	fmt.Format("maps/%s.wad", mapname);
+	FString lmapname = mapname;
+
+	for (int x = 1; x < 50; x++) {
+		FString nMapName;
+		nMapName.Format("%sV%d", mapname.GetChars(), x);
+		if (nMapName.Len() <= 8) lname = fileSystem.CheckNumForName(nMapName.GetChars());
+		fmt.Format("maps/%s.wad", nMapName.GetChars());
+		lwad = fileSystem.CheckNumForFullName(fmt.GetChars());
+
+		if (lname >= 0 || lwad >= 0) {
+			lmapname = nMapName;
+			max = x;
+		}
+		else {
+			return max;
+			break;
+		}
+	}
+	return 0;
+}
+
 //===========================================================================
 //
 // Opens a map for reading
@@ -137,61 +165,46 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 		
 		FString fMapname(mapname);
 
-		// Version 0 will always refer to the base map with no version number
-		if (forceVersion > 0) {
+
+		int maxVersion = GetMaxMapVersion(mapname);
+
+		if (forceVersion == (maxVersion + 1)) // the current prime map (E1M1.wad) is the current max version + 1
+		{
+			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
+			fmt.Format("maps/%s.wad", mapname);
+			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
+			map->version = maxVersion + 1;
+		}
+		else if (forceVersion > 0) {
 			// Force a specific version and error out if it doesn't exist
 			FString nMapName;
-			nMapName.Format("V%d%s", forceVersion, fMapname.GetChars());
+			nMapName.Format("%sV%d", fMapname.GetChars(), forceVersion);
 			if (nMapName.Len() <= 8) lump_name = fileSystem.CheckNumForName(nMapName.GetChars());
 			fmt.Format("maps/%s.wad", nMapName.GetChars());
 			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
 			fMapname = nMapName;
 			map->version = forceVersion;
 		}
-		else if (forceVersion < 0) {
+		else if (forceVersion < 0) { // -1 is a signal that this is a game load, and didn't have a map version in the save. It should be V1 - but try the prime map as well (non-Supplice maps?) 
+			
 			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
-			fmt.Format("maps/%s.wad", mapname);
+			fmt.Format("maps/%sV1.wad", fMapname.GetChars());
 			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
-			map->version = 0;
-
-			int lwad = -1, lname = -1;
-			FString lmapname = fMapname;
-
-			// Find any version number higher, stop searching if there is a gap
-			// Version numbers CANNOT BE SKIPPED YET
-			for (int x = 1; x < 50; x++) {
-				FString nMapName;
-				nMapName.Format("V%d%s", x, fMapname.GetChars());
-				if (nMapName.Len() <= 8) lname = fileSystem.CheckNumForName(nMapName.GetChars());
-				fmt.Format("maps/%s.wad", nMapName.GetChars());
-				lwad = fileSystem.CheckNumForFullName(fmt.GetChars());
-
-				if (lname >= 0 || lwad >= 0) {
-					lmapname = nMapName;
-					lump_wad = lwad;
-					lump_name = lname;
-					map->version = x;
-				}
-				else {
-					break;
-				}
+			if (lump_wad < 0)
+			{
+				fmt.Format("maps/%s.wad", fMapname.GetChars());
+				lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
 			}
-
-			fMapname = lmapname;
+			map->version = 1;
 		}
-		else {
-			// If version is zero, just get the base map name, skipping the version number
-
-			// Check for both *.wad and *.map in order to load Build maps
-			// as well. The higher one will take precedence.
-			// Names with more than 8 characters will only be checked as .wad and .map.
+		else { // 0 - default, prime map.
 			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
-			fmt.Format("maps/%s.wad", mapname);
+			fmt.Format("maps/%s.wad", fMapname.GetChars());
 			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
-			/*fmt.Format("maps/%s.map", mapname);
-			lump_map = fileSystem.CheckNumForFullName(fmt);*/
+			map->version = maxVersion + 1;
 		}
-		
+
+
 		if (lump_name > lump_wad && lump_name > lump_map && lump_name != -1)
 		{
 			int lumpfile = fileSystem.GetFileContainer(lump_name);

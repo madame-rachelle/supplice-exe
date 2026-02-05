@@ -138,10 +138,10 @@ public:
 
 };
 
-MapData * P_OpenMapData(const char * mapname, bool justcheck, int forceVersion = -1);
-bool P_CheckMapData(const char * mapname, int forceVersion = -1);
+MapData * P_OpenMapData(const char * mapname, bool justcheck, int forceVersion = 0);
+bool P_CheckMapData(const char * mapname, int forceVersion = 0);
 
-void P_SetupLevel (FLevelLocals *Level, int position, bool newGame, int mapVersion = -1);
+void P_SetupLevel (FLevelLocals *Level, int position, bool newGame, int mapVersion = 0);
 void P_LoadLightmap(MapData *map);
 
 void P_FreeLevelData(bool fullgc = true);

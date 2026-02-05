@@ -2138,7 +2138,7 @@ void G_DoLoadGame ()
 	}
 	
 	// @Cockatrice - Retrieve the version number if it exists
-	int mapVersion = 0;
+	int mapVersion = -1;
 	arc("Map Version", mapVersion);
 	
 	// we are done with info.json.
