@@ -672,6 +672,16 @@ void EventManager::WorldUnloaded(const FString& nextmap)
 	}
 }
 
+void EventManager::PreSave(int saveType) {
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+		handler->PreSave(saveType);
+}
+
+void EventManager::PostSave(int saveType) {
+	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
+		handler->PostSave(saveType);
+}
+
 bool EventManager::ShouldCallStatic(bool forplay)
 {
 	return this != &staticEventManager && Level == primaryLevel;
@@ -2069,6 +2079,25 @@ void DStaticEventHandler::WorldTick()
 		if (isEmpty(func)) return;
 		VMValue params[1] = { (DStaticEventHandler*)this };
 		VMCall(func, params, 1, nullptr, 0);
+	}
+}
+
+void DStaticEventHandler::PreSave(int saveType) {
+	IFVIRTUAL(DStaticEventHandler, PreSave)
+	{
+		if (isEmpty(func)) return;
+		VMValue params[2] = { (DStaticEventHandler*)this, saveType };
+		VMCall(func, params, 2, nullptr, 0);
+	}
+}
+
+
+void DStaticEventHandler::PostSave(int saveType) {
+	IFVIRTUAL(DStaticEventHandler, PostSave)
+	{
+		if (isEmpty(func)) return;
+		VMValue params[2] = { (DStaticEventHandler*)this, saveType };
+		VMCall(func, params, 2, nullptr, 0);
 	}
 }
 

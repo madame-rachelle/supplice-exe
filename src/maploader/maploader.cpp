@@ -2185,6 +2185,7 @@ void MapLoader::LoadSideDefs2 (MapData *map, FMissingTextureTracker &missingtex)
 		sd->SetTextureYOffset(LittleShort(msd->rowoffset));
 		sd->SetTextureXScale(1.);
 		sd->SetTextureYScale(1.);
+		sd->ClearAlpha();
 		sd->linedef = nullptr;
 		sd->Flags = 0;
 		sd->UDMFIndex = i;
@@ -2940,7 +2941,9 @@ void MapLoader::CalcIndices()
 void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 {
 	const int *oldvertextable  = nullptr;
-
+	
+	Level->mapVersion = 0;
+	
 	// note: most of this ordering is important 
 	ForceNodeBuild = gennodes;
 
@@ -3035,6 +3038,11 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 
 	CalcIndices();
 	PostProcessLevel(checksum);
+	
+	// [XA] NOTE: this function is intentionally called _after_ PostProcessLevel,
+	// that way zscript level postprocessors see the "real" values of any sidedef
+	// post-edits as defined in the source map, free of internal aliasing details.
+	Level->UpdateSidedefRenderFlags();
 
 	LoopSidedefs(true);
 
@@ -3262,6 +3270,7 @@ void MapLoader::LoadLevel(MapData *map, const char *lumpname, int position)
 
 	Level->aabbTree = new DoomLevelAABBTree(Level);
 	Level->levelMesh = new DoomLevelMesh(*Level);
+	Level->mapVersion = map->version;
 
 	// [DVR] Populate subsector->bbox for alternative space culling in orthographic projection with no fog of war
 	subsector_t* sub = &Level->subsectors[0];

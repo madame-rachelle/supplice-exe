@@ -105,13 +105,41 @@ static int GetMapIndex(const char *mapname, int lastindex, const char *lumpname,
 	return -1;	// End of map reached
 }
 
+static int GetMaxMapVersion(FString mapname)
+{
+
+	FString fmt;
+	int lwad = -1, lname = -1, max = 0;
+
+	fmt.Format("maps/%s.wad", mapname);
+	FString lmapname = mapname;
+
+	for (int x = 1; x < 50; x++) {
+		FString nMapName;
+		nMapName.Format("%sV%d", mapname.GetChars(), x);
+		if (nMapName.Len() <= 8) lname = fileSystem.CheckNumForName(nMapName.GetChars());
+		fmt.Format("maps/%s.wad", nMapName.GetChars());
+		lwad = fileSystem.CheckNumForFullName(fmt.GetChars());
+
+		if (lname >= 0 || lwad >= 0) {
+			lmapname = nMapName;
+			max = x;
+		}
+		else {
+			return max;
+			break;
+		}
+	}
+	return 0;
+}
+
 //===========================================================================
 //
 // Opens a map for reading
 //
 //===========================================================================
 
-MapData *P_OpenMapData(const char * mapname, bool justcheck)
+MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 {
 	MapData * map = new MapData;
 	FileReader * wadReader = nullptr;
@@ -131,19 +159,52 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 	else
 	{
 		FString fmt;
-		int lump_wad;
-		int lump_map;
+		int lump_wad = -1;
+		int lump_map = -1;
 		int lump_name = -1;
 		
-		// Check for both *.wad and *.map in order to load Build maps
-		// as well. The higher one will take precedence.
-		// Names with more than 8 characters will only be checked as .wad and .map.
-		if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
-		fmt.Format("maps/%s.wad", mapname);
-		lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
-		fmt.Format("maps/%s.map", mapname);
-		lump_map = fileSystem.CheckNumForFullName(fmt.GetChars());
-		
+		FString fMapname(mapname);
+
+
+		int maxVersion = GetMaxMapVersion(mapname);
+
+		if (forceVersion == (maxVersion + 1)) // the current prime map (E1M1.wad) is the current max version + 1
+		{
+			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
+			fmt.Format("maps/%s.wad", mapname);
+			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
+			map->version = maxVersion + 1;
+		}
+		else if (forceVersion > 0) {
+			// Force a specific version and error out if it doesn't exist
+			FString nMapName;
+			nMapName.Format("%sV%d", fMapname.GetChars(), forceVersion);
+			if (nMapName.Len() <= 8) lump_name = fileSystem.CheckNumForName(nMapName.GetChars());
+			fmt.Format("maps/%s.wad", nMapName.GetChars());
+			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
+			fMapname = nMapName;
+			map->version = forceVersion;
+		}
+		else if (forceVersion < 0) { // -1 is a signal that this is a game load, and didn't have a map version in the save. It should be V1 - but try the prime map as well (non-Supplice maps?) 
+			
+			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
+			fmt.Format("maps/%sV1.wad", fMapname.GetChars());
+			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
+			if (lump_wad < 0)
+			{
+				fmt.Format("maps/%s.wad", fMapname.GetChars());
+				lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
+			}
+			map->version = 1;
+		}
+		else { // 0 - default, prime map.
+			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
+			fmt.Format("maps/%s.wad", fMapname.GetChars());
+			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
+			map->version = maxVersion + 1;
+		}
+
+
 		if (lump_name > lump_wad && lump_name > lump_map && lump_name != -1)
 		{
 			int lumpfile = fileSystem.GetFileContainer(lump_name);
@@ -181,7 +242,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 					const char * lumpname = fileSystem.GetFileFullName(lump_name + i);
 					try
 					{
-						index = GetMapIndex(mapname, index, lumpname, !justcheck);
+						index = GetMapIndex(fMapname.GetChars(), index, lumpname, !justcheck);
 					}
 					catch(...)
 					{
@@ -212,7 +273,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 
 					if (lumpname == NULL)
 					{
-						I_Error("Invalid map definition for %s", mapname);
+						I_Error("Invalid map definition for %s", fMapname.GetChars());
 					}
 					else if (!stricmp(lumpname, "ZNODES"))
 					{
@@ -375,9 +436,9 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck)
 	return map;		
 }
 
-bool P_CheckMapData(const char *mapname)
+bool P_CheckMapData(const char *mapname, int forceVersion)
 {
-	MapData *mapd = P_OpenMapData(mapname, true);
+	MapData *mapd = P_OpenMapData(mapname, true, forceVersion);
 	if (mapd == NULL) return false;
 	delete mapd;
 	return true;

@@ -322,6 +322,8 @@ public:
 	int WorldLineDamaged(line_t* line, AActor* source, int damage, FName damagetype, int side, DVector3 position, bool isradius);
 	void WorldLightning();
 	void WorldTick();
+	void PreSave(int saveType);					// @Cockatrice - Called immediately before a save, allowing managers to alter the world before saving
+	void PostSave(int saveType);				// @Cocaktrice - Called immediately after a save
 
 	//
 	void RenderFrame();
@@ -511,6 +513,9 @@ struct EventManager
 	void WorldLightning();
 	// this executes on every tick, before everything, only when in valid level and not paused
 	void WorldTick();
+	// @Cockatrice - Save callbacks
+	void PreSave(int saveType);
+	void PostSave(int saveType);
 	// this executes on every tick on UI side, always
 	void UiTick();
 	// this executes on every tick on UI side, always AND immediately after everything else

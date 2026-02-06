@@ -151,6 +151,7 @@ struct FLevelLocals
 	void ApplyCompatibility();
 	void ApplyCompatibility2();
 	AActor* SelectActorFromTID(int tid, size_t index, AActor* defactor);
+	void UpdateSidedefRenderFlags();
 
 	void Init();
 
@@ -267,7 +268,7 @@ public:
 	const char *GetSecretExitMap();
 	void ExitLevel(int position, bool keepFacing);
 	void SecretExitLevel(int position);
-	void DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool newGame);
+	void DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool newGame, int mapVersion = 0);
 
 	void DeleteAllAttachedLights();
 	void RecreateAllAttachedLights();
@@ -539,6 +540,7 @@ public:
 	int			clusterflags;
 	int			levelnum;
 	int			lumpnum;
+	int			mapVersion;
 	FString		LevelName;
 	FString		MapName;			// the lump name (E1M1, MAP01, etc)
 	FString		NextMap;			// go here when using the regular exit
