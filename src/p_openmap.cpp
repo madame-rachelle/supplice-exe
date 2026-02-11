@@ -108,29 +108,25 @@ static int GetMapIndex(const char *mapname, int lastindex, const char *lumpname,
 static int GetMaxMapVersion(FString mapname)
 {
 
-	FString fmt;
-	int lwad = -1, lname = -1, max = 0;
+    FString fmt;
+    int lwad = -1, lname = -1, max = 0;
 
-	fmt.Format("maps/%s.wad", mapname);
-	FString lmapname = mapname;
+    fmt.Format("maps/%s.wad", mapname);
+    FString lmapname = mapname;
 
-	for (int x = 1; x < 50; x++) {
-		FString nMapName;
-		nMapName.Format("%sV%d", mapname.GetChars(), x);
-		if (nMapName.Len() <= 8) lname = fileSystem.CheckNumForName(nMapName.GetChars());
-		fmt.Format("maps/%s.wad", nMapName.GetChars());
-		lwad = fileSystem.CheckNumForFullName(fmt.GetChars());
+    for (int x = 1; x < 50; x++) {
+        FString nMapName;
+        nMapName.Format("%sV%d", mapname.GetChars(), x);
+        if (nMapName.Len() <= 8) lname = fileSystem.CheckNumForName(nMapName.GetChars());
+        fmt.Format("maps/%s.wad", nMapName.GetChars());
+        lwad = fileSystem.CheckNumForFullName(fmt.GetChars());
 
-		if (lname >= 0 || lwad >= 0) {
-			lmapname = nMapName;
-			max = x;
-		}
-		else {
-			return max;
-			break;
-		}
-	}
-	return 0;
+        if (lname >= 0 || lwad >= 0) {
+            lmapname = nMapName;
+            max = x;
+        }
+    }
+    return max;
 }
 
 //===========================================================================
