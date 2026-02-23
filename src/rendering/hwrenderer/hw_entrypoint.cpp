@@ -288,7 +288,16 @@ void WriteSavePic(player_t* player, FileWriter* file, int width, int height)
 
 		// This shouldn't overwrite the global viewpoint even for a short time.
 		FRenderViewpoint savevp;
-		sector_t* viewsector = RenderViewpoint(savevp, players[consoleplayer].camera, &bounds, r_viewpoint.FieldOfView.Degrees(), 1.6f, 1.6f, true, false);
+		AActor* specialcam = players[consoleplayer].mo->master;
+		sector_t* viewsector;
+		if (specialcam)
+		{
+			viewsector = RenderViewpoint(savevp, specialcam, &bounds, r_viewpoint.FieldOfView.Degrees(), 1.6f, 1.6f, true, false);
+		}
+		else 
+		{
+			viewsector = RenderViewpoint(savevp, players[consoleplayer].camera, &bounds, r_viewpoint.FieldOfView.Degrees(), 1.6f, 1.6f, true, false);
+		}
 		RenderState.EnableStencil(false);
 		RenderState.SetNoSoftLightLevel();
 
