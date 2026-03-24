@@ -31,7 +31,7 @@ enum
 	CHANGELEVEL_PRERAISEWEAPON = 64,
 };
 
-void G_DoLoadLevel (const FString &MapName, int position, bool autosave, bool newGame, int mapVersion = -1);
+void G_DoLoadLevel (const FString &MapName, int position, bool autosave, bool newGame, int mapVersion = 0);
 
 void G_ClearSnapshots (void);
 void P_RemoveDefereds ();
