@@ -716,28 +716,18 @@ static ETraceStatus TraceCallbackForDitherTransparency(FTraceResults& res, void*
 	case TRACE_HitWall:
 		{
 			sector_t* linesec = res.Line->sidedef[res.Side]->sector;
-			if (linesec && linesec->subsectorcount > 0 && (*CurMapSections)[linesec->subsectors[0]->mapsection])
+			if (linesec->subsectorcount > 0 && (*CurMapSections)[linesec->subsectors[0]->mapsection])
 			{
-				bf = res.Line->sidedef[res.Side]->sector->floorplane.ZatPoint(res.HitPos.XY()) - EQUAL_EPSILON;
-				bc = res.Line->sidedef[res.Side]->sector->ceilingplane.ZatPoint(res.HitPos.XY()) + EQUAL_EPSILON;
+				bf = res.Line->sidedef[res.Side]->sector->floorplane.ZatPoint(res.HitPos.XY());
+				bc = res.Line->sidedef[res.Side]->sector->ceilingplane.ZatPoint(res.HitPos.XY());
 				if (res.Line->sidedef[!res.Side])
 				{
 					// Two sided line! So let's find out if mid, top, or bottom texture needs dithered transparency
-					switch(res.Tier)
-					{
-					case TIER_Middle:
-					case TIER_FFloor:
-						res.Line->sidedef[res.Side]->Flags |= WALLF_DITHERTRANS_MID;
-						break;
-					case TIER_Upper:
-						res.Line->sidedef[res.Side]->Flags |= WALLF_DITHERTRANS_TOP;
-						break;
-					case TIER_Lower:
-						res.Line->sidedef[res.Side]->Flags |= WALLF_DITHERTRANS_BOTTOM;
-						break;
-					default:
-						break;
-					}
+					bf = max(bf, res.Line->sidedef[!res.Side]->sector->floorplane.ZatPoint(res.HitPos.XY()));
+					bc = min(bc, res.Line->sidedef[!res.Side]->sector->ceilingplane.ZatPoint(res.HitPos.XY()));
+					if (res.HitPos.Z <= bf) res.Line->sidedef[res.Side]->Flags |= WALLF_DITHERTRANS_BOTTOM;
+					else if (res.HitPos.Z < bc) res.Line->sidedef[res.Side]->Flags |= WALLF_DITHERTRANS_MID;
+					else res.Line->sidedef[res.Side]->Flags |= WALLF_DITHERTRANS_TOP;
 
 					res.Line->sidedef[res.Side]->dithertranscount = max<int>(1, res.Line->sidedef[!res.Side]->sector->e->XFloor.ffloors.Size());
 				}
@@ -750,28 +740,54 @@ static ETraceStatus TraceCallbackForDitherTransparency(FTraceResults& res, void*
 		}
 		break;
 	case TRACE_HitFloor:
-		if ((*CurMapSections)[res.Sector->subsectors[0]->mapsection] && res.HitVector.dot(res.Sector->floorplane.Normal()) < 0.0)
+		if (res.Sector->subsectorcount > 0 && (*CurMapSections)[res.Sector->subsectors[0]->mapsection] && res.HitVector.dot(res.Sector->floorplane.Normal()) < 0.0)
 		{
-			if (res.ffloor)
-			{
-				res.ffloor->top.plane->dithertransflag = true;
-			}
-			else if ((res.Sector->Level->PointInSector(res.HitPos)->sectornum == res.Sector->sectornum) && res.Sector->Level->PointInRenderSubsector(FLOAT2FIXED(res.HitPos.X), FLOAT2FIXED(res.HitPos.Y))) // make sure that hitpos is not within void or some other sector
+			if (res.HitPos.Z == res.Sector->floorplane.ZatPoint(res.HitPos))
 			{
 				res.Sector->floorplane.dithertransflag = true;
+			}
+			else if (res.Sector->e->XFloor.ffloors.Size()) // Maybe it was 3D floors
+			{
+				F3DFloor *rover;
+				int kk;
+				for (kk = 0; kk < (int)res.Sector->e->XFloor.ffloors.Size(); kk++)
+				{
+					rover = res.Sector->e->XFloor.ffloors[kk];
+					if ((rover->flags&(FF_EXISTS | FF_RENDERPLANES | FF_THISINSIDE)) == (FF_EXISTS | FF_RENDERPLANES))
+					{
+						if (res.HitPos.Z == rover->top.plane->ZatPoint(res.HitPos))
+						{
+							rover->top.plane->dithertransflag = true;
+							break; // Out of for loop
+						}
+					}
+				}
 			}
 		}
 		break;
 	case TRACE_HitCeiling:
-		if ((*CurMapSections)[res.Sector->subsectors[0]->mapsection] && res.HitVector.dot(res.Sector->ceilingplane.Normal()) < 0.0)
+		if (res.Sector->subsectorcount > 0 && (*CurMapSections)[res.Sector->subsectors[0]->mapsection] && res.HitVector.dot(res.Sector->ceilingplane.Normal()) < 0.0)
 		{
-			if (res.ffloor)
-			{
-				res.ffloor->bottom.plane->dithertransflag = true;
-			}
-			else if ((res.Sector->Level->PointInSector(res.HitPos)->sectornum == res.Sector->sectornum) && res.Sector->Level->PointInRenderSubsector(FLOAT2FIXED(res.HitPos.X), FLOAT2FIXED(res.HitPos.Y))) // make sure that hitpos is not within void or some other sector
+			if (res.HitPos.Z == res.Sector->ceilingplane.ZatPoint(res.HitPos))
 			{
 				res.Sector->ceilingplane.dithertransflag = true;
+			}
+			else if (res.Sector->e->XFloor.ffloors.Size()) // Maybe it was 3D floors
+			{
+				F3DFloor *rover;
+				int kk;
+				for (kk = 0; kk < (int)res.Sector->e->XFloor.ffloors.Size(); kk++)
+				{
+					rover = res.Sector->e->XFloor.ffloors[kk];
+					if ((rover->flags&(FF_EXISTS | FF_RENDERPLANES | FF_THISINSIDE)) == (FF_EXISTS | FF_RENDERPLANES))
+					{
+						if (res.HitPos.Z == rover->bottom.plane->ZatPoint(res.HitPos))
+						{
+							rover->bottom.plane->dithertransflag = true;
+							break; // Out of for loop
+						}
+					}
+				}
 			}
 		}
 		break;
@@ -808,12 +824,24 @@ void HWDrawInfo::SetDitherTransFlags(AActor* actor)
 		{
 			startsec = Level->PointInRenderSubsector(campos)->sector;
 			Trace(campos, startsec, vvec, distance,
-				  0, 0, actor, results, TRACE_3DCallback, TraceCallbackForDitherTransparency, &CurrentMapSections);
+				  0, 0, actor, results, TRACE_PortalRestrict, TraceCallbackForDitherTransparency, &CurrentMapSections);
 			campos.Z += actor->Height * 0.5;
 			Trace(campos, startsec, vvec, distance,
-				  0, 0, actor, results, TRACE_3DCallback, TraceCallbackForDitherTransparency, &CurrentMapSections);
+				  0, 0, actor, results, TRACE_PortalRestrict, TraceCallbackForDitherTransparency, &CurrentMapSections);
 			campos.Z -= actor->Height * 0.5;
 			campos.X += horix; campos.Y -= horiy;
+		}
+
+		// Tracers don't work on 3D floors when you are starting in the same sector (standing under them, for example)
+		if (actor->Sector->e->XFloor.ffloors.Size()) // 3D floor
+		{
+			F3DFloor *rover;
+			for (int kk = 0; kk < (int)actor->Sector->e->XFloor.ffloors.Size(); kk++)
+			{
+				rover = actor->Sector->e->XFloor.ffloors[kk];
+				rover->top.plane->dithertransflag = true;
+				rover->bottom.plane->dithertransflag = true;
+			}
 		}
 	}
 }

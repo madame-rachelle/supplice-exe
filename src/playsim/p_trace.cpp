@@ -71,10 +71,8 @@ struct FTraceInfo
 	// These are required for 3D-floor checking
 	// to create a fake sector with a floor 
 	// or ceiling plane coming from a 3D-floor
-	sector_t DummySector[2];
-	int sectorsel;
-	bool using3DFloorTop, using3DFloorBottom, inside3DFloor, inside3DLiquid;
-	F3DFloor *usedTop, *usedBottom, *in3DLiquid;
+	sector_t DummySector[2];	
+	int sectorsel;		
 
 	void Setup3DFloors();
 	bool LineCheck(intercept_t *in, double dist, DVector3 hit, bool special3dpass);
@@ -200,7 +198,7 @@ bool Trace(const DVector3 &start, sector_t *sector, const DVector3 &direction, d
 	}
 
 	if (reslt)
-	{
+	{ 
 		return flags ? EditTraceResult(flags, res) : true;
 	}
 	else
@@ -208,6 +206,7 @@ bool Trace(const DVector3 &start, sector_t *sector, const DVector3 &direction, d
 		return false;
 	}
 }
+
 
 //============================================================================
 //
@@ -217,7 +216,7 @@ bool Trace(const DVector3 &start, sector_t *sector, const DVector3 &direction, d
 
 void FTraceInfo::EnterSectorPortal(FPathTraverse &pt, int position, double frac, sector_t *entersec)
 {
-	DVector2 displacement = entersec->GetPortalDisplacement(position);
+	DVector2 displacement = entersec->GetPortalDisplacement(position);;
 	double enterdist = MaxDist * frac;
 	DVector3 exit = Start + enterdist * Vec;
 	DVector3 enter = exit + displacement;
@@ -291,13 +290,6 @@ void FTraceInfo::EnterLinePortal(FPathTraverse &pt, intercept_t *in)
 void FTraceInfo::Setup3DFloors()
 {
 	TDeletingArray<F3DFloor*> &ff = CurSector->e->XFloor.ffloors;
-	using3DFloorTop = false;
-	using3DFloorBottom = false;
-	inside3DFloor = false;
-	inside3DLiquid = false;
-	usedTop = NULL;
-	usedBottom = NULL;
-	Results->ffloor = NULL;
 
 	if (ff.Size())
 	{
@@ -317,65 +309,26 @@ void FTraceInfo::Setup3DFloors()
 			if (!(rover->flags&FF_EXISTS))
 				continue;
 
-			// [DVR] This block seems redundant. I'll leave it commented out instead of deleting it, in case it ends up being needed
-			/*
-			if (Results->Crossed3DWater == NULL || (TraceFlags & TRACE_3DLiquidCallback))
+			if (Results->Crossed3DWater == NULL)
 			{
 				if (Check3DFloorPlane(rover, false) && isLiquid(rover))
 				{
 					// only consider if the plane is above the actual floor.
 					if (rover->top.plane->ZatPoint(Results->HitPos) > bf)
 					{
-						if (CurSector->sectornum == Level->PointInSector(Results->HitPos)->sectornum)
-						{
-							Results->Crossed3DWater = rover;
-							Results->Crossed3DWaterPos = Results->HitPos;
-							if ((TraceFlags & TRACE_3DLiquidCallback) && TraceCallback != NULL)
-							{
-								Results->HitType = TRACE_HitFloor;
-								Results->HitVector = Vec;
-								Results->entering3DLiquid = inside3DLiquid = Vec.dot(rover->top.plane->Normal()) > 0.0;
-								in3DLiquid = rover;
-								TraceCallback(*Results, TraceCallbackData);
-								Results->Crossed3DWater = NULL;
-								Results->HitType = TRACE_HitNone;
-							}
-							Results->Distance = 0;
-						}
-					}
-				}
-				if ((TraceFlags & TRACE_3DLiquidCallback) && Check3DFloorPlane(rover, true) && isLiquid(rover))
-				{
-					// only consider if the bottom plane is below the actual ceiling.
-					if (rover->bottom.plane->ZatPoint(Results->HitPos) < bc)
-					{
-						if (CurSector->sectornum == Level->PointInSector(Results->HitPos)->sectornum)
-						{
-							Results->Crossed3DWater = rover;
-							Results->Crossed3DWaterPos = Results->HitPos;
-							if ((TraceFlags & TRACE_3DLiquidCallback) && TraceCallback != NULL)
-							{
-								Results->HitType = TRACE_HitCeiling;
-								Results->HitVector = Vec;
-								Results->entering3DLiquid = inside3DLiquid = Vec.dot(rover->bottom.plane->Normal()) > 0.0;
-								in3DLiquid = rover;
-								TraceCallback(*Results, TraceCallbackData);
-								Results->Crossed3DWater = NULL;
-								Results->HitType = TRACE_HitNone;
-							}
-							Results->Distance = 0;
-						}
+						Results->Crossed3DWater = rover;
+						Results->Crossed3DWaterPos = Results->HitPos;
+						Results->Distance = 0;
 					}
 				}
 			}
-			*/
 
-			if (!(rover->flags&FF_SHOOTTHROUGH) || (TraceFlags & TRACE_3DLiquidCallback && isLiquid(rover)))
+			if (!(rover->flags&FF_SHOOTTHROUGH))
 			{
 				double ff_bottom = rover->bottom.plane->ZatPoint(pos);
 				double ff_top = rover->top.plane->ZatPoint(pos);
 				// clip to the part of the sector we are in
-				if (pos.Z > ff_top && !(TraceFlags & TRACE_3DLiquidCallback && isLiquid(rover)))
+				if (pos.Z > ff_top)
 				{
 					// above
 					if (bf < ff_top)
@@ -384,11 +337,9 @@ void FTraceInfo::Setup3DFloors()
 						CurSector->SetTexture(sector_t::floor, *rover->top.texture, false);
 						CurSector->ClearPortal(sector_t::floor);
 						bf = ff_top;
-						using3DFloorTop = true;
-						usedTop = rover;
 					}
 				}
-				else if (pos.Z < ff_bottom && !(TraceFlags & TRACE_3DLiquidCallback && isLiquid(rover)))
+				else if (pos.Z < ff_bottom)
 				{
 					//below
 					if (bc > ff_bottom)
@@ -397,42 +348,27 @@ void FTraceInfo::Setup3DFloors()
 						CurSector->SetTexture(sector_t::ceiling, *rover->bottom.texture, false);
 						bc = ff_bottom;
 						CurSector->ClearPortal(sector_t::ceiling);
-						using3DFloorBottom = true;
-						usedBottom = rover;
 					}
 				}
-				else if (pos.Z < ff_top && pos.Z > ff_bottom)
+				else
 				{
 					// inside
-					if (TraceFlags & TRACE_3DLiquidCallback && isLiquid(rover))
+					if (bf < ff_bottom)
 					{
-						inside3DLiquid = true;
-						in3DLiquid = rover;
+						CurSector->floorplane = *rover->bottom.plane;
+						CurSector->SetTexture(sector_t::floor, *rover->bottom.texture, false);
+						CurSector->ClearPortal(sector_t::floor);
+						bf = ff_bottom;
 					}
-					else
-					{
-						inside3DFloor = true;
-						if (bf < ff_bottom)
-						{
-							CurSector->floorplane = *rover->bottom.plane;
-							CurSector->SetTexture(sector_t::floor, *rover->bottom.texture, false);
-							CurSector->ClearPortal(sector_t::floor);
-							bf = ff_bottom;
-							using3DFloorBottom = true;
-							usedBottom = rover;
-						}
 
-						if (bc > ff_top)
-						{
-							CurSector->ceilingplane = *rover->top.plane;
-							CurSector->SetTexture(sector_t::ceiling, *rover->top.texture, false);
-							CurSector->ClearPortal(sector_t::ceiling);
-							bc = ff_top;
-							using3DFloorTop = true;
-							usedTop = rover;
-						}
-						inshootthrough = false;
+					if (bc > ff_top)
+					{
+						CurSector->ceilingplane = *rover->top.plane;
+						CurSector->SetTexture(sector_t::ceiling, *rover->top.texture, false);
+						CurSector->ClearPortal(sector_t::ceiling);
+						bc = ff_top;
 					}
+					inshootthrough = false;
 				}
 			}
 		}
@@ -451,8 +387,7 @@ bool FTraceInfo::LineCheck(intercept_t *in, double dist, DVector3 hit, bool spec
 	int lineside;
 	sector_t *entersector;
 
-	double ff = FLT_MAX, fc = FLT_MIN, bf = 0, bc = 0;
-	bool OoBflag = false;
+	double ff, fc, bf = 0, bc = 0;
 
 	if (in->d.line->frontsector->sectornum == CurSector->sectornum)
 	{
@@ -478,17 +413,7 @@ bool FTraceInfo::LineCheck(intercept_t *in, double dist, DVector3 hit, bool spec
 
 	if (!(in->d.line->flags & ML_TWOSIDED))
 	{
-		lineside = P_PointOnLineSide(Start.XY(), in->d.line);
-		if (lineside == 1) // Trace coming in from Out of Bounds
-		{
-			entersector = in->d.line->frontsector;
-			CurSector = NULL;
-			lineside = 0;
-		}
-		else
-		{
-			entersector = NULL;
-		}
+		entersector = NULL;
 	}
 	else
 	{
@@ -511,28 +436,8 @@ bool FTraceInfo::LineCheck(intercept_t *in, double dist, DVector3 hit, bool spec
 		}
 	}
 
-	if (CurSector != NULL)
-	{
-		ff = CurSector->floorplane.ZatPoint(hit);
-		fc = CurSector->ceilingplane.ZatPoint(hit);
-		sector_t *hsec = CurSector->GetHeightSec();
-		if (Results->CrossedWater == NULL &&
-			hsec != NULL &&
-			Start.Z > hsec->floorplane.ZatPoint(Start) &&
-			hit.Z <= hsec->floorplane.ZatPoint(hit))
-		{
-			// hit crossed a water plane
-			if (CheckSectorPlane(hsec, true))
-			{
-				if (CurSector->sectornum == Level->PointInSector(Results->HitPos)->sectornum)
-				{
-					Results->CrossedWater = &Level->sectors[CurSector->sectornum];
-					Results->CrossedWaterPos = Results->HitPos;
-					Results->Distance = 0;
-				}
-			}
-		}
-	}
+	ff = CurSector->floorplane.ZatPoint(hit);
+	fc = CurSector->ceilingplane.ZatPoint(hit);
 
 	if (entersector != NULL)
 	{
@@ -540,54 +445,44 @@ bool FTraceInfo::LineCheck(intercept_t *in, double dist, DVector3 hit, bool spec
 		bc = entersector->ceilingplane.ZatPoint(hit);
 	}
 
-	bool thinfloor = (using3DFloorBottom && !!(usedBottom->flags&FF_THINFLOOR));
-	if (CurSector != NULL && hit.Z <= ff && (using3DFloorTop && !inside3DFloor ? -1.0 : 1.0)*Vec.dot(CurSector->floorplane.Normal()) < 0)
+	sector_t *hsec = CurSector->GetHeightSec();
+	if (Results->CrossedWater == NULL &&
+		hsec != NULL &&
+		Start.Z > hsec->floorplane.ZatPoint(Start) &&
+		hit.Z <= hsec->floorplane.ZatPoint(hit))
+	{
+		// hit crossed a water plane
+		if (CheckSectorPlane(hsec, true))
+		{
+			Results->CrossedWater = &Level->sectors[CurSector->sectornum];
+			Results->CrossedWaterPos = Results->HitPos;
+			Results->Distance = 0;
+		}
+	}
+
+	if (hit.Z <= ff)
 	{
 		// hit floor in front of wall
-		Results->HitType = (inside3DFloor ? TRACE_HitCeiling : TRACE_HitFloor);
+		Results->HitType = TRACE_HitFloor;
 		Results->HitTexture = CurSector->GetTexture(sector_t::floor);
-		if (using3DFloorTop) Results->ffloor = usedTop;
-		else if (inside3DFloor && using3DFloorBottom) Results->ffloor = usedBottom;
 	}
-	else if (CurSector != NULL && hit.Z >= fc && (using3DFloorBottom && !inside3DFloor && !thinfloor? -1.0 : 1.0)*Vec.dot(CurSector->ceilingplane.Normal()) < 0)
+	else if (hit.Z >= fc)
 	{
 		// hit ceiling in front of wall
-		Results->HitType = (inside3DFloor ? TRACE_HitFloor : TRACE_HitCeiling);
+		Results->HitType = TRACE_HitCeiling;
 		Results->HitTexture = CurSector->GetTexture(sector_t::ceiling);
-		if (using3DFloorBottom) Results->ffloor = usedBottom;
-		else if (inside3DFloor && using3DFloorTop) Results->ffloor = usedTop;
 	}
 	else if (entersector == NULL ||
 		hit.Z < bf || hit.Z > bc ||
 		((in->d.line->flags & WallMask) && !special3dpass))
 	{
 		// hit the wall
+		Results->HitType = TRACE_HitWall;
 		Results->Tier =
 			entersector == NULL ? TIER_Middle :
 			hit.Z <= bf ? TIER_Lower :
 			hit.Z >= bc ? TIER_Upper : TIER_Middle;
-		switch (Results->Tier)
-		{
-		case TIER_Lower:
-			if (CurSector != NULL && hit.Z >= ff) Results->HitType = TRACE_HitWall;
-			else
-			{
-				Results->HitType = TRACE_HitNone;
-				OoBflag = true;
-			}
-			break;
-		case TIER_Upper:
-			if (CurSector != NULL && hit.Z <= fc) Results->HitType = TRACE_HitWall;
-			else
-			{
-				Results->HitType = TRACE_HitNone;
-				OoBflag = true;
-			}
-			break;
-		default:
-			Results->HitType = TRACE_HitWall;
-		}
-		if ((Results->HitType == TRACE_HitWall) && (TraceFlags & TRACE_Impact) && !special3dpass)
+		if ((TraceFlags & TRACE_Impact) && !special3dpass)
 		{
 			P_ActivateLine(in->d.line, IgnoreThis, lineside, SPAC_Impact);
 		}
@@ -595,8 +490,6 @@ bool FTraceInfo::LineCheck(intercept_t *in, double dist, DVector3 hit, bool spec
 	else
 	{ 	// made it past the wall
 		// check for 3D floors first
-		using3DFloorBottom = false;
-		using3DFloorTop = false;
 		if (entersector->e->XFloor.ffloors.Size())
 		{
 			memcpy(&DummySector[sectorsel], entersector, sizeof(sector_t));
@@ -611,13 +504,13 @@ bool FTraceInfo::LineCheck(intercept_t *in, double dist, DVector3 hit, bool spec
 			{
 				int entershootthrough = !!(rover->flags&FF_SHOOTTHROUGH);
 
-				if (rover->flags&FF_EXISTS && (entershootthrough != inshootthrough || (TraceFlags & TRACE_3DLiquidCallback && isLiquid(rover))))
+				if (entershootthrough != inshootthrough && rover->flags&FF_EXISTS)
 				{
 					double ff_bottom = rover->bottom.plane->ZatPoint(hit);
 					double ff_top = rover->top.plane->ZatPoint(hit);
 
 					// clip to the part of the sector we are in
-					if (hit.Z > ff_top && !(TraceFlags & TRACE_3DLiquidCallback && isLiquid(rover)))
+					if (hit.Z > ff_top)
 					{
 						// 3D floor height is the same as the floor height or underground. We need to test a second spot to see if it is above or below
 						if ((ff_top < bf && !setFloor) || fabs(bf - ff_top) < EQUAL_EPSILON)
@@ -638,11 +531,9 @@ bool FTraceInfo::LineCheck(intercept_t *in, double dist, DVector3 hit, bool spec
 							entersector->SetTexture(sector_t::floor, *rover->top.texture, false);
 							entersector->ClearPortal(sector_t::floor);
 							bf = ff_top;
-							using3DFloorTop = true;
-							usedTop = rover;
 						}
 					}
-					else if (hit.Z < ff_bottom && !(TraceFlags & TRACE_3DLiquidCallback && isLiquid(rover)))
+					else if (hit.Z < ff_bottom)
 					{
 						// 3D floor height is the same as the ceiling height or above it. We need to test a second spot to see if it is above or below
 						if ((ff_bottom > bc && !setCeiling) || fabs(bc - ff_bottom) < EQUAL_EPSILON)
@@ -663,22 +554,14 @@ bool FTraceInfo::LineCheck(intercept_t *in, double dist, DVector3 hit, bool spec
 							entersector->SetTexture(sector_t::ceiling, *rover->bottom.texture, false);
 							entersector->ClearPortal(sector_t::ceiling);
 							bc = ff_bottom;
-							using3DFloorBottom = true;
-							usedBottom = rover;
 						}
 					}
-					else if (hit.Z > ff_bottom && hit.Z < ff_top)
+					else
 					{
 						//hit the edge - equivalent to hitting the wall
 						Results->HitType = TRACE_HitWall;
 						Results->Tier = TIER_FFloor;
 						Results->ffloor = rover;
-						if (TraceFlags & TRACE_3DLiquidCallback && isLiquid(rover) && !inside3DLiquid)
-						{
-							Results->Crossed3DWater = rover;
-							Results->Crossed3DWaterPos = hit;
-							Results->entering3DLiquid = true;
-						}
 						if ((TraceFlags & TRACE_Impact) && in->d.line->special)
 						{
 							P_ActivateLine(in->d.line, IgnoreThis, lineside, SPAC_Impact);
@@ -687,21 +570,6 @@ bool FTraceInfo::LineCheck(intercept_t *in, double dist, DVector3 hit, bool spec
 					}
 				}
 			}
-		}
-
-		if (inside3DLiquid && TraceFlags & TRACE_3DLiquidCallback)
-		{
-			Results->HitType = TRACE_HitWall;
-			Results->Tier = TIER_FFloor;
-			Results->ffloor = in3DLiquid;
-			Results->Crossed3DWater = in3DLiquid;
-			Results->Crossed3DWaterPos = hit;
-			Results->entering3DLiquid = false;
-			if ((TraceFlags & TRACE_Impact) && in->d.line->special)
-			{
-				P_ActivateLine(in->d.line, IgnoreThis, lineside, SPAC_Impact);
-			}
-			goto cont;
 		}
 
 		Results->HitType = TRACE_HitNone;
@@ -723,11 +591,10 @@ cont:
 	if (Results->HitType != TRACE_HitNone)
 	{
 		// We hit something, so figure out where exactly
-		if (CurSector != NULL) Results->Sector = &Level->sectors[CurSector->sectornum];
-		else if (entersector != NULL) Results->Sector = &Level->sectors[entersector->sectornum];
+		Results->Sector = &Level->sectors[CurSector->sectornum];
 
 		if (Results->HitType != TRACE_HitWall &&
-			CurSector != NULL && !CheckSectorPlane(CurSector, Results->HitType == (inside3DFloor ? TRACE_HitCeiling : TRACE_HitFloor)))
+			!CheckSectorPlane(CurSector, Results->HitType == TRACE_HitFloor))
 		{ // trace is parallel to the plane (or right on it)
 			if (entersector == NULL)
 			{
@@ -764,55 +631,29 @@ cont:
 			Results->Side = lineside;
 		}
 	}
-	if (CurSector == NULL && entersector)
-	{
-		CurSector = entersector; // Trace probably came in from out of bounds, but we can't let CurSector be NULL after LineCheck() returns
-		Results->Sector = CurSector;
-	}
 
 	if (TraceCallback != NULL && Results->HitType != TRACE_HitNone)
 	{
-		if (TraceFlags & TRACE_3DLiquidCallback && Results->Crossed3DWater != NULL)
+		switch (TraceCallback(*Results, TraceCallbackData))
 		{
-			// Callback and fall through
-			TraceCallback(*Results, TraceCallbackData);
-			Results->Crossed3DWater = NULL;
+		case TRACE_Stop:
+			return false;
+
+		case TRACE_ContinueOutOfBounds:
+			return true;
+
+		case TRACE_Abort:
 			Results->HitType = TRACE_HitNone;
-			Results->ffloor = NULL;
-			Results->Line = NULL;
-			Results->Distance = 0;
-			OoBflag = true;
-		}
-		else
-		{
-			switch (TraceCallback(*Results, TraceCallbackData))
-			{
-			case TRACE_Stop:
-				return false;
+			return false;
 
-			case TRACE_ContinueOutOfBounds:
-				if (Results->ffloor)
-				{
-					startfrac = Results->Fraction + EQUAL_EPSILON;
-					CurSector = (Results->HitType != TRACE_HitWall ? Results->Sector : entersector);
-					Setup3DFloors();
-					if (Results->HitType != TRACE_HitWall) return LineCheck(in, dist, hit, false);
-				}
-				return true;
+		case TRACE_Skip:
+			Results->HitType = TRACE_HitNone;
+			if (!special3dpass && (TraceFlags & TRACE_3DCallback) && entersector && entersector->e->XFloor.ffloors.Size())
+				return LineCheck(in, dist, hit, true);
+			break;
 
-			case TRACE_Abort:
-				Results->HitType = TRACE_HitNone;
-				return false;
-
-			case TRACE_Skip:
-				Results->HitType = TRACE_HitNone;
-				if (!special3dpass && (TraceFlags & TRACE_3DCallback) && entersector && entersector->e->XFloor.ffloors.Size())
-					return LineCheck(in, dist, hit, true);
-				break;
-
-			default:
-				break;
-			}
+		default:
+			break;
 		}
 	}
 
@@ -820,11 +661,6 @@ cont:
 	{
 		CurSector = entersector;
 		EnterDist = dist;
-		if (OoBflag)
-		{
-			startfrac = in->frac + EQUAL_EPSILON;
-			Setup3DFloors();
-		}
 		return true;
 	}
 	else
@@ -883,24 +719,20 @@ bool FTraceInfo::ThingCheck(intercept_t *in, double dist, DVector3 hit)
 
 		if (hit.Z > ff_ceiling && CurSector->PortalBlocksMovement(sector_t::ceiling))	// actor is hit above the current ceiling
 		{
-			Results->HitType = (inside3DFloor ? TRACE_HitFloor : TRACE_HitCeiling);
+			Results->HitType = TRACE_HitCeiling;
 			Results->HitTexture = CurSector->GetTexture(sector_t::ceiling);
-			if (using3DFloorBottom) Results->ffloor = usedBottom;
-			else if (inside3DFloor && using3DFloorTop) Results->ffloor = usedTop;
 		}
 		else if (hit.Z < ff_floor && CurSector->PortalBlocksMovement(sector_t::floor))	// actor is hit below the current floor
 		{
-			Results->HitType = (inside3DFloor ? TRACE_HitCeiling : TRACE_HitFloor);
+			Results->HitType = TRACE_HitFloor;
 			Results->HitTexture = CurSector->GetTexture(sector_t::floor);
-			if (using3DFloorTop) Results->ffloor = usedTop;
-			else if (inside3DFloor && using3DFloorBottom) Results->ffloor = usedBottom;
 		}
 		else goto cont1;
 
 		// the trace hit a 3D floor before the thing.
 		// Calculate an intersection and abort.
 		Results->Sector = &Level->sectors[CurSector->sectornum];
-		if (!CheckSectorPlane(CurSector, Results->HitType == (inside3DFloor ? TRACE_HitCeiling : TRACE_HitFloor)))
+		if (!CheckSectorPlane(CurSector, Results->HitType == TRACE_HitFloor))
 		{
 			Results->HitType = TRACE_HitNone;
 		}
@@ -909,15 +741,7 @@ bool FTraceInfo::ThingCheck(intercept_t *in, double dist, DVector3 hit)
 			switch (TraceCallback(*Results, TraceCallbackData))
 			{
 			case TRACE_Continue: return true;
-			case TRACE_ContinueOutOfBounds:
-				if (Results->ffloor && (Results->HitType != TRACE_HitNone))
-				{
-					startfrac = Results->Fraction + EQUAL_EPSILON;
-					CurSector = Results->Sector;
-					Setup3DFloors();
-					return ThingCheck(in, dist, hit);
-				}
-				return true;
+			case TRACE_ContinueOutOfBounds: return true;
 			case TRACE_Stop:	 return false;
 			case TRACE_Abort:	 Results->HitType = TRACE_HitNone; return false;
 			case TRACE_Skip:	 Results->HitType = TRACE_HitNone; return true;
@@ -968,7 +792,6 @@ bool FTraceInfo::TraceTraverse (int ptflags)
 	FPathTraverse it(Level, Start.X, Start.Y, Vec.X * MaxDist, Vec.Y * MaxDist, ptflags | PT_DELTA, startfrac);
 	intercept_t *in;
 	int lastsplashsector = -1;
-	bool lastflathit = false;
 
 	while ((in = it.Next()))
 	{
@@ -981,50 +804,12 @@ bool FTraceInfo::TraceTraverse (int ptflags)
 				{
 					if (Check3DFloorPlane(rover, false))
 					{
-						// only consider if the plane is above the actual floor and not flush with the actual ceiling.
-						if (rover->top.plane->ZatPoint(Results->HitPos) > CurSector->floorplane.ZatPoint(Results->HitPos)
-							&& rover->top.plane->ZatPoint(Results->HitPos) < CurSector->ceilingplane.ZatPoint(Results->HitPos))
+						// only consider if the plane is above the actual floor.
+						if (rover->top.plane->ZatPoint(Results->HitPos) > CurSector->floorplane.ZatPoint(Results->HitPos))
 						{
-							if (CurSector->sectornum == Level->PointInSector(Results->HitPos)->sectornum)
-							{
-								Results->Crossed3DWater = rover;
-								Results->Crossed3DWaterPos = Results->HitPos;
-								if ((TraceFlags & TRACE_3DLiquidCallback) && TraceCallback != NULL)
-								{
-									Results->HitType = TRACE_HitFloor;
-									Results->HitVector = Vec;
-									Results->entering3DLiquid = inside3DLiquid = Vec.dot(rover->top.plane->Normal()) > 0.0;
-									in3DLiquid = rover;
-									TraceCallback(*Results, TraceCallbackData);
-									Results->Crossed3DWater = NULL;
-									Results->HitType = TRACE_HitNone;
-								}
-								Results->Distance = 0;
-							}
-						}
-					}
-					if ((TraceFlags & TRACE_3DLiquidCallback) && Check3DFloorPlane(rover, true))
-					{
-						// only consider if the bottom plane is below the actual ceiling and not flush with the actual floor.
-						if (rover->bottom.plane->ZatPoint(Results->HitPos) < CurSector->ceilingplane.ZatPoint(Results->HitPos)
-							&& rover->bottom.plane->ZatPoint(Results->HitPos) > CurSector->floorplane.ZatPoint(Results->HitPos))
-						{
-							if (CurSector->sectornum == Level->PointInSector(Results->HitPos)->sectornum)
-							{
-								Results->Crossed3DWater = rover;
-								Results->Crossed3DWaterPos = Results->HitPos;
-								if ((TraceFlags & TRACE_3DLiquidCallback) && TraceCallback != NULL)
-								{
-									Results->HitType = TRACE_HitCeiling;
-									Results->HitVector = Vec;
-									Results->entering3DLiquid = inside3DLiquid = Vec.dot(rover->bottom.plane->Normal()) > 0.0;
-									in3DLiquid = rover;
-									TraceCallback(*Results, TraceCallbackData);
-									Results->Crossed3DWater = NULL;
-									Results->HitType = TRACE_HitNone;
-								}
-								Results->Distance = 0;
-							}
+							Results->Crossed3DWater = rover;
+							Results->Crossed3DWaterPos = Results->HitPos;
+							Results->Distance = 0;
 						}
 					}
 				}
@@ -1084,235 +869,17 @@ bool FTraceInfo::TraceTraverse (int ptflags)
 		}
 	}
 
-	// Check for sector portals when no line or thing was crossed
 	if (Results->HitType == TRACE_HitNone)
 	{
-		// Crossed a floor portals?
-		while (Vec.Z < 0 && !CurSector->PortalBlocksMovement(sector_t::floor))
+		if (CurSector->PortalBlocksMovement(sector_t::floor) && CheckSectorPlane(CurSector, true))
 		{
-			double dist2 = MaxDist;
-			DVector3 hit2 = Start + Vec * MaxDist;
-			// calculate position where the portal is crossed
-			double portz = CurSector->GetPortalPlaneZ(sector_t::floor);
-			if (hit2.Z < portz && limitz > portz)
-			{
-				limitz = portz;
-				EnterSectorPortal(it, sector_t::floor, (portz - Start.Z) / (Vec.Z * MaxDist), CurSector);
-				bool actorfound = false;
-				while ((in = it.Next()))
-				{
-					// Deal with splashes in 3D floors (but only run once per sector, not each iteration - and stop if something was found.)
-					if (Results->Crossed3DWater == NULL && lastsplashsector != CurSector->sectornum)
-					{
-						for (auto rover : CurSector->e->XFloor.ffloors)
-						{
-							if ((rover->flags & FF_EXISTS) && isLiquid(rover))
-							{
-								if (Check3DFloorPlane(rover, false))
-								{
-									// only consider if the plane is above the actual floor and not flush with the actual ceiling.
-									if (rover->top.plane->ZatPoint(Results->HitPos) > CurSector->floorplane.ZatPoint(Results->HitPos)
-										&& rover->top.plane->ZatPoint(Results->HitPos) < CurSector->ceilingplane.ZatPoint(Results->HitPos))
-									{
-										if (CurSector->sectornum == Level->PointInSector(Results->HitPos)->sectornum)
-										{
-											Results->Crossed3DWater = rover;
-											Results->Crossed3DWaterPos = Results->HitPos;
-											if ((TraceFlags & TRACE_3DLiquidCallback) && TraceCallback != NULL)
-											{
-												Results->HitType = TRACE_HitFloor;
-												Results->HitVector = Vec;
-												Results->entering3DLiquid = inside3DLiquid = Vec.dot(rover->top.plane->Normal()) > 0.0;
-												in3DLiquid = rover;
-												TraceCallback(*Results, TraceCallbackData);
-												Results->Crossed3DWater = NULL;
-												Results->HitType = TRACE_HitNone;
-											}
-											Results->Distance = 0;
-										}
-									}
-								}
-								if ((TraceFlags & TRACE_3DLiquidCallback) && Check3DFloorPlane(rover, true))
-								{
-									// only consider if the bottom plane is below the actual ceiling and not flush with the actual floor.
-									if (rover->bottom.plane->ZatPoint(Results->HitPos) < CurSector->ceilingplane.ZatPoint(Results->HitPos)
-										&& rover->bottom.plane->ZatPoint(Results->HitPos) > CurSector->floorplane.ZatPoint(Results->HitPos))
-									{
-										if (CurSector->sectornum == Level->PointInSector(Results->HitPos)->sectornum)
-										{
-											Results->Crossed3DWater = rover;
-											Results->Crossed3DWaterPos = Results->HitPos;
-											if ((TraceFlags & TRACE_3DLiquidCallback) && TraceCallback != NULL)
-											{
-												Results->HitType = TRACE_HitCeiling;
-												Results->HitVector = Vec;
-												Results->entering3DLiquid = inside3DLiquid = Vec.dot(rover->bottom.plane->Normal()) > 0.0;
-												in3DLiquid = rover;
-												TraceCallback(*Results, TraceCallbackData);
-												Results->Crossed3DWater = NULL;
-												Results->HitType = TRACE_HitNone;
-											}
-											Results->Distance = 0;
-										}
-									}
-								}
-							}
-						}
-						lastsplashsector = CurSector->sectornum;
-					}
-					dist2 = MaxDist * in->frac;
-					hit2 = Start + Vec * dist2;
-					if (((in->d.thing->flags & ActorMask) || ActorMask == 0xffffffff) && in->d.thing != IgnoreThis)
-					{
-						if (!ThingCheck(in, dist2, hit2))
-						{
-							actorfound = true;
-							break;
-						}
-					}
-				}
-				if (actorfound) break;
-			}
-			else
-			{
-				break;
-			}
+			Results->HitType = TRACE_HitFloor;
+			Results->HitTexture = CurSector->GetTexture(sector_t::floor);
 		}
-		// ... or a ceiling portals?
-		while (Vec.Z > 0 && !CurSector->PortalBlocksMovement(sector_t::ceiling))
+		else if (CurSector->PortalBlocksMovement(sector_t::ceiling) && CheckSectorPlane(CurSector, false))
 		{
-			double dist2 = MaxDist;
-			DVector3 hit2 = Start + Vec * dist2;
-			// calculate position where the portal is crossed
-			double portz = CurSector->GetPortalPlaneZ(sector_t::ceiling);
-			if (hit2.Z > portz && limitz < portz)
-			{
-				limitz = portz;
-				EnterSectorPortal(it, sector_t::ceiling, (portz - Start.Z) / (Vec.Z * MaxDist), CurSector);
-				bool actorfound = false;
-				while ((in = it.Next()))
-				{
-					// Deal with splashes in 3D floors (but only run once per sector, not each iteration - and stop if something was found.)
-					if (Results->Crossed3DWater == NULL && lastsplashsector != CurSector->sectornum)
-					{
-						for (auto rover : CurSector->e->XFloor.ffloors)
-						{
-							if ((rover->flags & FF_EXISTS) && isLiquid(rover))
-							{
-								if (Check3DFloorPlane(rover, false))
-								{
-									// only consider if the plane is above the actual floor and not flush with the actual ceiling.
-									if (rover->top.plane->ZatPoint(Results->HitPos) > CurSector->floorplane.ZatPoint(Results->HitPos)
-										&& rover->top.plane->ZatPoint(Results->HitPos) < CurSector->ceilingplane.ZatPoint(Results->HitPos))
-									{
-										if (CurSector->sectornum == Level->PointInSector(Results->HitPos)->sectornum)
-										{
-											Results->Crossed3DWater = rover;
-											Results->Crossed3DWaterPos = Results->HitPos;
-											if ((TraceFlags & TRACE_3DLiquidCallback) && TraceCallback != NULL)
-											{
-												Results->HitType = TRACE_HitFloor;
-												Results->HitVector = Vec;
-												Results->entering3DLiquid = inside3DLiquid = Vec.dot(rover->top.plane->Normal()) > 0.0;
-												in3DLiquid = rover;
-												TraceCallback(*Results, TraceCallbackData);
-												Results->Crossed3DWater = NULL;
-												Results->HitType = TRACE_HitNone;
-											}
-											Results->Distance = 0;
-										}
-									}
-								}
-								if ((TraceFlags & TRACE_3DLiquidCallback) && Check3DFloorPlane(rover, true))
-								{
-									// only consider if the bottom plane is below the actual ceiling and not flush with the actual floor.
-									if (rover->bottom.plane->ZatPoint(Results->HitPos) < CurSector->ceilingplane.ZatPoint(Results->HitPos)
-										&& rover->bottom.plane->ZatPoint(Results->HitPos) > CurSector->floorplane.ZatPoint(Results->HitPos))
-									{
-										if (CurSector->sectornum == Level->PointInSector(Results->HitPos)->sectornum)
-										{
-											Results->Crossed3DWater = rover;
-											Results->Crossed3DWaterPos = Results->HitPos;
-											if ((TraceFlags & TRACE_3DLiquidCallback) && TraceCallback != NULL)
-											{
-												Results->HitType = TRACE_HitCeiling;
-												Results->HitVector = Vec;
-												Results->entering3DLiquid = inside3DLiquid = Vec.dot(rover->bottom.plane->Normal()) > 0.0;
-												in3DLiquid = rover;
-												TraceCallback(*Results, TraceCallbackData);
-												Results->Crossed3DWater = NULL;
-												Results->HitType = TRACE_HitNone;
-											}
-											Results->Distance = 0;
-										}
-									}
-								}
-							}
-						}
-						lastsplashsector = CurSector->sectornum;
-					}
-					dist2 = MaxDist * in->frac;
-					hit2 = Start + Vec * dist2;
-					if (((in->d.thing->flags & ActorMask) || ActorMask == 0xffffffff) && in->d.thing != IgnoreThis)
-					{
-						if (!ThingCheck(in, dist2, hit2))
-						{
-							actorfound = true;
-							break;
-						}
-					}
-				}
-				if (actorfound) break;
-			}
-			else
-			{
-				break;
-			}
-		}
-	}
-
-	// Check for intersection with flats when no line or thing was crossed
-	if (Results->HitType == TRACE_HitNone)
-	{
-		while (!lastflathit)
-		{
-			bool thinfloor = (using3DFloorBottom && !!(usedBottom->flags&FF_THINFLOOR));
-			if ((using3DFloorTop && !inside3DFloor ? -1.0 : 1.0)*Vec.dot(CurSector->floorplane.Normal()) < 0 && CurSector->PortalBlocksMovement(sector_t::floor) && CheckSectorPlane(CurSector, true))
-			{
-				Results->HitType = (inside3DFloor ? TRACE_HitCeiling : TRACE_HitFloor);
-				Results->HitTexture = CurSector->GetTexture(sector_t::floor);
-				lastflathit = true;
-				if (using3DFloorTop) Results->ffloor = usedTop;
-				else if (inside3DFloor && using3DFloorBottom) Results->ffloor = usedBottom;
-				else Results->ffloor = NULL;
-			}
-			else if ((using3DFloorBottom && !inside3DFloor && !thinfloor ? -1.0 : 1.0)*Vec.dot(CurSector->ceilingplane.Normal()) < 0 && CurSector->PortalBlocksMovement(sector_t::ceiling) && CheckSectorPlane(CurSector, false))
-			{
-				Results->HitType = (inside3DFloor ? TRACE_HitFloor : TRACE_HitCeiling);
-				Results->HitTexture = CurSector->GetTexture(sector_t::ceiling);
-				lastflathit = true;
-				if (using3DFloorBottom) Results->ffloor = usedBottom;
-				else if (inside3DFloor && using3DFloorTop) Results->ffloor = usedTop;
-				else Results->ffloor = NULL;
-			}
-			if (lastflathit && (TraceCallback != NULL))
-			{
-				// [DVR] Call TraceCallback for the last floor/ceiling hit without crossing a line or thing
-				F3DFloor* Rff = Results->ffloor;
-				Results->Sector = &Level->sectors[CurSector->sectornum];
-				ETraceStatus mytracestatus = TraceCallback(*Results, TraceCallbackData);
-				if ((mytracestatus  == TRACE_ContinueOutOfBounds) && Rff)
-				{
-					lastflathit = false;
-					startfrac = Results->Fraction + EQUAL_EPSILON;
-					CurSector = Results->Sector;
-					Setup3DFloors();
-				}
-			}
-			else
-			{
-				break;
-			}
+			Results->HitType = TRACE_HitCeiling;
+			Results->HitTexture = CurSector->GetTexture(sector_t::ceiling);
 		}
 	}
 
@@ -1350,6 +917,40 @@ bool FTraceInfo::TraceTraverse (int ptflags)
 		Results->Fraction = 1.;
 	}
 
+	// [MK] set 3d floor on plane hits (if any)
+	// modders will need this to get accurate plane normals on slopes
+	if (Results->HitType == TRACE_HitFloor)
+	{
+		double secbottom = Results->Sector->floorplane.ZatPoint(Results->HitPos);
+		for (auto rover : Results->Sector->e->XFloor.ffloors)
+		{
+			if (!(rover->flags&FF_EXISTS))
+				continue;
+			double ff_top = rover->top.plane->ZatPoint(Results->HitPos);
+			if (fabs(ff_top-secbottom) < EQUAL_EPSILON)
+				continue;
+			if (fabs(ff_top-Results->HitPos.Z) > EQUAL_EPSILON)
+				continue;
+			Results->ffloor = rover;
+			break;
+		}
+	}
+	else if (Results->HitType == TRACE_HitCeiling)
+	{
+		double sectop = Results->Sector->ceilingplane.ZatPoint(Results->HitPos);
+		for (auto rover : Results->Sector->e->XFloor.ffloors)
+		{
+			if (!(rover->flags&FF_EXISTS))
+				continue;
+			double ff_bottom = rover->bottom.plane->ZatPoint(Results->HitPos);
+			if (fabs(ff_bottom-sectop) < EQUAL_EPSILON)
+				continue;
+			if (fabs(ff_bottom-Results->HitPos.Z) > EQUAL_EPSILON)
+				continue;
+			Results->ffloor = rover;
+			break;
+		}
+	}
 	return Results->HitType != TRACE_HitNone;
 }
 
@@ -1431,7 +1032,6 @@ static bool EditTraceResult (uint32_t flags, FTraceResults &res)
 			}
 		}
 	}
-
 	return true;
 }
 
@@ -1457,7 +1057,6 @@ DEFINE_FIELD_NAMED_X(TraceResults, FTraceResults, Line, HitLine)
 DEFINE_FIELD_X(TraceResults, FTraceResults, Side)
 DEFINE_FIELD_X(TraceResults, FTraceResults, Tier)
 DEFINE_FIELD_X(TraceResults, FTraceResults, unlinked)
-DEFINE_FIELD_X(TraceResults, FTraceResults, entering3DLiquid)
 DEFINE_FIELD_X(TraceResults, FTraceResults, HitType)
 DEFINE_FIELD_X(TraceResults, FTraceResults, ffloor)
 DEFINE_FIELD_X(TraceResults, FTraceResults, CrossedWater)
