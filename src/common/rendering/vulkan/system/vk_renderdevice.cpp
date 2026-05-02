@@ -344,10 +344,10 @@ void VulkanRenderDevice::StartPrecaching()
 	mDescriptorSetManager->ResetHWTextureSets();
 }
 
-void VulkanRenderDevice::BlurScene(float amount)
+void VulkanRenderDevice::BlurScene(float amount, bool force)
 {
 	if (mPostprocess)
-		mPostprocess->BlurScene(amount);
+		mPostprocess->BlurScene(amount, force);
 }
 
 void VulkanRenderDevice::UpdatePalette()

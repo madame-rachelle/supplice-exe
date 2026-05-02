@@ -232,7 +232,7 @@ public:
 
 	virtual int GetClientWidth() = 0;
 	virtual int GetClientHeight() = 0;
-	virtual void BlurScene(float amount) {}
+	virtual void BlurScene(float amount, bool force = false) {}
 
 	virtual void InitLightmap(int LMTextureSize, int LMTextureCount, TArray<uint16_t>& LMTextureData) {}
 

@@ -572,6 +572,8 @@ struct Screen native
 	native static Vector2 SetOffset(double x, double y);
 	native static void ClearScreen(color col = 0);
 	native static void SetScreenFade(double factor);
+	
+	native static void SetCursor(String texName = "None");
 
 	native static void EnableStencil(bool on);
 	native static void SetStencil(int offs, int op, int flags = -1);

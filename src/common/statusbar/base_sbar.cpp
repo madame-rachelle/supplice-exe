@@ -61,6 +61,7 @@ CVAR(Color, crosshaircolor, 0xff0000, CVAR_ARCHIVE);
 CVAR(Int, crosshairhealth, 2, CVAR_ARCHIVE);
 CVARD(Float, crosshairscale, 0.5, CVAR_ARCHIVE, "changes the size of the crosshair");
 CVAR(Bool, crosshairgrow, false, CVAR_ARCHIVE);
+CVAR(Bool, crosshairfilter, false, CVAR_ARCHIVE);
 
 CUSTOM_CVARD(Float, hud_scalefactor, 1.f, CVAR_ARCHIVE, "changes the hud scale")
 {
@@ -211,6 +212,7 @@ void ST_DrawCrosshair(int phealth, double xpos, double ypos, double scale, DAngl
 		DTA_Rotate, angle.Degrees(),
 		DTA_AlphaChannel, true,
 		DTA_FillColor, color & 0xFFFFFF,
+		DTA_BilinearFilter, (bool)crosshairfilter,
 		TAG_DONE);
 }
 
