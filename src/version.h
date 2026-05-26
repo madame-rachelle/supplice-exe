@@ -43,7 +43,7 @@ const char *GetSuppliceVersion();
 /** Lots of different version numbers **/
 
 #define VERSIONSTR "4.14.3"
-#define SUPPVERSIONSTR "v0.4.1.1"
+#define SUPPVERSIONSTR "v0.5.0.0"
 
 // The version as seen in the Windows resource
 #define RC_FILEVERSION 4,14,3,0
