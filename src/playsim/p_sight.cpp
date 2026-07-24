@@ -33,6 +33,7 @@
 #include "b_bot.h"
 #include "p_spec.h"
 #include "vm.h"
+#include "m_round.h"
 
 #include "g_levellocals.h"
 #include "actorinlines.h"
@@ -677,22 +678,22 @@ bool SightCheck::P_SightPathTraverse ()
 	xt2 = x2 / FBlockmap::MAPBLOCKUNITS;
 	yt2 = y2 / FBlockmap::MAPBLOCKUNITS;
 
-	mapx = xs_FloorToInt(xt1);
-	mapy = xs_FloorToInt(yt1);
-	int mapex = xs_FloorToInt(xt2);
-	int mapey = xs_FloorToInt(yt2);
+	mapx = RoundDown(xt1);
+	mapy = RoundDown(yt1);
+	int mapex = RoundDown(xt2);
+	int mapey = RoundDown(yt2);
 
 
 	if (mapex > mapx)
 	{
 		mapxstep = 1;
-		partialx = 1. - xt1 + xs_FloorToInt(xt1);
+		partialx = 1. - xt1 + RoundDown(xt1);
 		ystep = (y2 - y1) / fabs(x2 - x1);
 	}
 	else if (mapex < mapx)
 	{
 		mapxstep = -1;
-		partialx = xt1 - xs_FloorToInt(xt1);
+		partialx = xt1 - RoundDown(xt1);
 		ystep = (y2 - y1) / fabs(x2 - x1);
 	}
 	else
@@ -706,13 +707,13 @@ bool SightCheck::P_SightPathTraverse ()
 	if (mapey > mapy)
 	{
 		mapystep = 1;
-		partialy = 1. - yt1 + xs_FloorToInt(yt1);
+		partialy = 1. - yt1 + RoundDown(yt1);
 		xstep = (x2 - x1) / fabs(y2 - y1);
 	}
 	else if (mapey < mapy)
 	{
 		mapystep = -1;
-		partialy = yt1 - xs_FloorToInt(yt1);
+		partialy = yt1 - RoundDown(yt1);
 		xstep = (x2 - x1) / fabs(y2 - y1);
 	}
 	else
@@ -768,7 +769,7 @@ bool SightCheck::P_SightPathTraverse ()
 		if (itres == -1 || (mapxstep | mapystep) == 0)
 			break;
 
-		switch (((xs_FloorToInt(yintercept) == mapy) << 1) | (xs_FloorToInt(xintercept) == mapx))
+		switch (((RoundDown(yintercept) == mapy) << 1) | (RoundDown(xintercept) == mapx))
 		{
 		case 0:		// neither xintercept nor yintercept match!
 sightcounts[5]++;
@@ -881,6 +882,14 @@ sightcounts[0]++;
 			res = false;
 			goto done;
 		}
+	}
+
+	// Return true if the actor is calling CheckSight
+	// on themselves and they can see themselves
+	if (t1 == t2)
+	{
+		res = true;
+		goto done;
 	}
 
 	// killough 4/19/98: make fake floors and ceilings block monster view

@@ -71,6 +71,7 @@
 #include "g_levellocals.h"
 #include "vm.h"
 #include "texturemanager.h"
+#include "m_round.h"
 
 //==========================================================================
 //
@@ -1594,7 +1595,7 @@ int side_t::GetLightLevel (bool foggy, int baselight, int which, bool is3dlight,
 			if (((sector->Level->flags2 & LEVEL2_SMOOTHLIGHTING) || (Flags & WALLF_SMOOTHLIGHTING) || r_fakecontrast == 2) &&
 				delta.X != 0)
 			{
-				rel = xs_RoundToInt // OMG LEE KILLOUGH LIVES! :/
+				rel = RoundHalfUp // OMG LEE KILLOUGH LIVES! :/
 					(
 						sector->Level->WallHorizLight
 						+ fabs(atan(delta.Y / delta.X) / 1.57079)

@@ -78,6 +78,7 @@
 #include "s_music.h"
 #include "v_video.h"
 #include "texturemanager.h"
+#include "m_round.h"
 
 	// P-codes for ACS scripts
 	enum
@@ -611,7 +612,7 @@ inline float ACSToFloat(int acsval)
 
 inline int DoubleToACS(double val)
 {
-	return xs_Fix<16>::ToFix(val);
+	return FloatToFixed<16>(val);
 }
 
 inline DAngle ACSToAngle(int acsval)
@@ -5862,7 +5863,7 @@ int DLevelScript::CallFunction(int argCount, int funcIndex, int32_t *args, int &
 
 		case ACSF_Sqrt:
 			MIN_ARG_COUNT(1);
-			return xs_FloorToInt(g_sqrt(double(args[0])));
+			return RoundDown(g_sqrt(double(args[0])));
 
 		case ACSF_FixedSqrt:
 			MIN_ARG_COUNT(1);

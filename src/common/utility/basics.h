@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <type_traits>
+#include <cmath>
+#include <limits>
+#include <m_round.h>
 
 #if defined(_M_X64) || defined(__x86_64__) || defined(__amd64__) || defined(__amd64) || defined(__x86_64__) || defined(__x86_64)
 #include <xmmintrin.h>

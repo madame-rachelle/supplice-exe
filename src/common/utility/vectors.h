@@ -48,9 +48,6 @@
 
 #include "common/utility/basics.h"
 
-// this is needed to properly normalize angles. We cannot do that with compiler provided conversions because they differ too much
-#include "xs_Float.h"
-
 // make this a local inline function to avoid any dependencies on other headers and not pollute the global namespace
 namespace pi
 {
@@ -1423,7 +1420,7 @@ public:
 
 	unsigned BAMs() const
 	{
-		return xs_CRoundToInt(Degrees_ * (0x40000000 / 90.));
+		return RoundHalfEven(Degrees_ * (0x40000000 / 90.));
 	}
 
 	constexpr vec_t Degrees() const

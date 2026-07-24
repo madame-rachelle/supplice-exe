@@ -904,6 +904,8 @@ void D_Display ()
 	int wipe_type;
 	sector_t *viewsec;
 
+	SetDeltaTime();
+	
 	if (nodrawers || screen == NULL)
 		return; 				// for comparative timing / profiling
 	
