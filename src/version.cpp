@@ -89,6 +89,11 @@ int GetGitDistance()
 	return GIT_DISTANCE;
 }
 
+const char *GetSuppliceVersion()
+{
+	return SUPPVERSIONSTR;
+}
+
 VersionInfo GetCurrentVersionForUpdater()
 {
 	static VersionInfo version = ([]() {

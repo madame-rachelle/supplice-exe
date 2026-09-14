@@ -693,11 +693,25 @@ void C_DrawConsole ()
 		if (ConBottom >= Defaults::min_con_lines_for_text)
 		{
 			if (textScale == 1)
+			{
+				DrawText(twod, CurrentConsoleFont, CR_ORANGE, twod->GetWidth() - Defaults::left_margin -
+					CurrentConsoleFont->StringWidth (GetSuppliceVersion()),
+					round((float)ConBottom / textScale) - CurrentConsoleFont->GetHeight() - 20 - Defaults::bottom_margin,
+					GetSuppliceVersion(), TAG_DONE);
 				DrawText(twod, CurrentConsoleFont, CR_ORANGE, twod->GetWidth() - Defaults::left_margin -
 					CurrentConsoleFont->StringWidth (GetVersionString()),
 					round((float)ConBottom / textScale) - CurrentConsoleFont->GetHeight() - Defaults::bottom_margin,
 					GetVersionString(), TAG_DONE);
+			}
 			else
+			{
+				DrawText(twod, CurrentConsoleFont, CR_ORANGE, (float)twod->GetWidth() / textScale - Defaults::left_margin -
+					CurrentConsoleFont->StringWidth(GetSuppliceVersion()),
+					round((float)ConBottom / textScale) - CurrentConsoleFont->GetHeight() - 20 - Defaults::bottom_margin,
+					GetSuppliceVersion(),
+					DTA_VirtualWidth, twod->GetWidth() / textScale,
+					DTA_VirtualHeight, twod->GetHeight() / textScale,
+					DTA_KeepRatio, true, TAG_DONE);
 				DrawText(twod, CurrentConsoleFont, CR_ORANGE, (float)twod->GetWidth() / textScale - Defaults::left_margin -
 					CurrentConsoleFont->StringWidth(GetVersionString()),
 					round((float)ConBottom / textScale) - CurrentConsoleFont->GetHeight() - Defaults::bottom_margin,
@@ -705,7 +719,7 @@ void C_DrawConsole ()
 					DTA_VirtualWidth, twod->GetWidth() / textScale,
 					DTA_VirtualHeight, twod->GetHeight() / textScale,
 					DTA_KeepRatio, true, TAG_DONE);
-
+			}
 		}
 
 	}

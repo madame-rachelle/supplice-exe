@@ -3339,7 +3339,7 @@ void DAutomap::drawAuthorMarkers ()
 
 void DAutomap::drawCrosshair (const AMColor &color)
 {
-	twod->AddPixel(f_w/2, (f_h+1)/2, color.RGB);
+	//twod->AddPixel(f_w/2, (f_h+1)/2, color.RGB);
 }
 
 //=============================================================================

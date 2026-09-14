@@ -66,7 +66,7 @@ EXTERN_FARG(iwad);
 EXTERN_FARG(host);
 EXTERN_FARG(join);
 
-bool foundprio = false; // global to prevent iwad box from appearing
+bool foundprio = true; // global to prevent iwad box from appearing
 
 //==========================================================================
 //
@@ -813,7 +813,7 @@ int FIWadManager::IdentifyVersion (std::vector<FileSys::ResourceName>&wadfiles, 
 #endif
 
 		I_FatalError(
-			"Cannot find a game IWAD (doom.wad, heretic.wad, etc)!\n"
+			"Cannot find a game IWAD (supplice.ipk3)!\n"
 			"Did you install " GAMENAME " properly?\n"
 			"\n"
 			"You can do any of the following:\n"

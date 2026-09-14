@@ -27,6 +27,7 @@
 /** Lots of different version numbers **/
 
 #define VERSIONSTR "5.0.1"
+#define SUPPVERSIONSTR "v0.5.0.1"
 
 // The version as seen in the Windows resource
 #define RC_FILEVERSION 5,0,1,0
@@ -72,29 +73,29 @@
 #define SAVEVER 4560
 
 // This is so that derivates can use the same savegame versions without worrying about engine compatibility
-#define GAMESIG "UZDOOM"
+#define GAMESIG "SUPPLICE"
 
 // list of compatible ports, ex.:
 // #define ALLOWLOADIN "PORT1", "PORT2", "PORT3"
-#define ALLOWLOADIN "LZDOOM"
+#define ALLOWLOADIN "UZDOOM"
 
 #ifndef LOAD_GZDOOM_4142_SAVES
 	#define LOAD_GZDOOM_4142_SAVES 1
 #endif
 
-#define BASEWAD "uzdoom.pk3"
+#define BASEWAD "supplice.pk3"
 // Set OPTIONALWAD to "" (null) to disable searching for it
 #define OPTIONALWAD "game_support.pk3"
 #define GZDOOM 1
 #define VR3D_ENABLED
 
 // More stuff that needs to be different for derivatives.
-#define GAMENAME "UZDoom"
-#define WGAMENAME L"UZDoom"
-#define GAMENAMELOWERCASE "uzdoom"
+#define GAMENAME "Supplice"
+#define WGAMENAME L"Supplice"
+#define GAMENAMELOWERCASE "supplice"
 #define APPID "org.zdoom.UZDoom"
-#define QUERYIWADDEFAULT true
-#define BUGS_URL "https://github.com/UZDoom/UZDoom/issues"
+#define QUERYIWADDEFAULT false
+#define BUGS_URL "https://steamcommunity.com/app/1693280/discussions/"
 
 #define UPDATER_URL "https://zdoom.org/uzdoom-updates.php?r={}&f={}"
 #define UPDATER_URL_BACKUP "https://github.com/UZDoom/UZDoom/releases/{}/{}/{}"
@@ -120,3 +121,4 @@ const char *GetGitHash();
 const char *GetGitTime();
 const char *GetGitTag();
 int GetGitDistance();
+const char *GetSuppliceVersion();

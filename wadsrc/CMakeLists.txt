@@ -1,6 +1,6 @@
-add_pk3(uzdoom.pk3 ${CMAKE_CURRENT_SOURCE_DIR}/static)
+add_pk3(supplice.pk3 ${CMAKE_CURRENT_SOURCE_DIR}/static)
 
-generate_language_files(uzdoom_pk3 static/language.csv ENGINE)
+generate_language_files(supplice_pk3 static/language.csv ENGINE)
 
 # insert appstream data into uzdoom.pk3, for release notes
 add_custom_target(
@@ -12,9 +12,9 @@ add_custom_target(
 		"${CMAKE_CURRENT_SOURCE_DIR}/../CONTRIBUTORS"
 		"${CMAKE_CURRENT_SOURCE_DIR}/static/contributors.txt"
 )
-add_dependencies(uzdoom_pk3 copy_metadata)
+add_dependencies(supplice_pk3 copy_metadata)
 add_custom_command(
-	TARGET uzdoom_pk3
+	TARGET supplice_pk3
 	POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E remove
 		"${CMAKE_CURRENT_SOURCE_DIR}/static/meta.xml"
