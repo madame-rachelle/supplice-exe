@@ -4,31 +4,20 @@
 ** Intermission stats for hubs
 **
 **---------------------------------------------------------------------------
-** Copyright 2005 Christoph Oelckers
-** All rights reserved.
 **
-** Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions
-** are met:
+** Copyright 1998-2016 Marisa Heit
+** Copyright 2005-2016 Christoph Oelckers
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
 **
-** 1. Redistributions of source code must retain the above copyright
-**    notice, this list of conditions and the following disclaimer.
-** 2. Redistributions in binary form must reproduce the above copyright
-**    notice, this list of conditions and the following disclaimer in the
-**    documentation and/or other materials provided with the distribution.
-** 3. The name of the author may not be used to endorse or promote products
-**    derived from this software without specific prior written permission.
+** SPDX-License-Identifier: GPL-3.0-or-later
 **
-** THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-** IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-** OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-** IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
-** INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-** NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+**---------------------------------------------------------------------------
+**
+** Code written prior to 2026 is also licensed under:
+**
+** SPDX-License-Identifier: BSD-3-Clause
+**
 **---------------------------------------------------------------------------
 **
 */
@@ -53,13 +42,12 @@
 struct FHubInfo
 {
 	int			levelnum;
-	
+
 	int			totalkills;
 	int			maxkills;
 	int			maxitems;
 	int			maxsecret;
 	int			maxfrags;
-	int			mapversion = 0;		// @Cockatrice - Used when returning to map to know what version to load
 
 	wbplayerstruct_t	plyr[MAXPLAYERS];
 
@@ -71,7 +59,6 @@ struct FHubInfo
 		maxsecret	= wbs.maxsecret;
 		maxitems	= wbs.maxitems;
 		maxfrags	= wbs.maxfrags;
-		mapversion	= 0;
 		memcpy(plyr, wbs.plyr, sizeof(plyr));
 		return *this;
 	}
@@ -79,18 +66,6 @@ struct FHubInfo
 
 
 static TArray<FHubInfo> hubdata;
-
-// Get previously stored hub level version
-int G_GetHubLevelVersion(int levelnum) {
-	for (unsigned int i = 0; i < hubdata.Size(); i++) {
-		if (hubdata[i].levelnum == levelnum)
-		{
-			return hubdata[i].mapversion;
-		}
-	}
-
-	return -1;
-}
 
 void G_LeavingHub(FLevelLocals *Level, int mode, cluster_info_t * cluster, wbstartstruct_t * wbs)
 {
@@ -112,7 +87,6 @@ void G_LeavingHub(FLevelLocals *Level, int mode, cluster_info_t * cluster, wbsta
 		}
 
 		hubdata[i].levelnum = Level->levelnum;
-		hubdata[i].mapversion = Level->mapVersion;
 		if (!multiplayer && !deathmatch)
 		{
 			// The player counters don't work in hubs
@@ -186,16 +160,12 @@ FSerializer &Serialize(FSerializer &arc, const char *key, FHubInfo &h, FHubInfo 
 {
 	if (arc.BeginObject(key))
 	{
-		int zero = 0;
-		if(arc.isReading())
-			h.mapversion = 0;
 		arc("levelnum", h.levelnum)
 			("totalkills", h.totalkills)
 			("maxkills", h.maxkills)
 			("maxitems", h.maxitems)
 			("maxsecret", h.maxsecret)
 			("maxfrags", h.maxfrags)
-			("mapversion", h.mapversion)
 			.Array("players", h.plyr, MAXPLAYERS)
 			.EndObject();
 	}

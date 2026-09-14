@@ -1,32 +1,26 @@
-//-----------------------------------------------------------------------------
-//
-// Copyright 2016-2018 Christoph Oelckers
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/
-//
-//-----------------------------------------------------------------------------
-//
-// VM thunks for internal functions.
-//
-// Important note about this file: Since everything in here is supposed to be called
-// from JIT-compiled VM code it needs to be very careful about calling conventions.
-// As a result none of the integer sized struct types may be used as function
-// arguments, because current C++ calling conventions require them to be passed
-// by reference. The JIT code, however will pass them by value so any direct native function
-// taking such an argument needs to receive it as a naked int.
-//
-//-----------------------------------------------------------------------------
+/*
+** vmthunks.cpp
+**
+** VM thunks for internal functions.
+**
+**---------------------------------------------------------------------------
+**
+** Copyright 2016-2018 Christoph Oelckers
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
+**
+** SPDX-License-Identifier: GPL-3.0-or-later
+**
+**---------------------------------------------------------------------------
+**
+** Important note about this file:
+** Since everything in here is supposed to be called from JIT-compiled VM code,
+** it needs to be very careful about calling conventions. As a result none of
+** the integer sized struct types may be used as function arguments, because
+** current C++ calling conventions require them to be passed by reference.
+** The JIT code, however will pass them by value so any direct native function
+** taking such an argument needs to receive it as a naked int.
+*/
 
 #include <time.h>
 #include "vm.h"
@@ -60,6 +54,10 @@
 #include "s_music.h"
 #include "texturemanager.h"
 #include "v_draw.h"
+#include "d_net.h"
+
+extern int paused;
+extern bool pauseext;
 
 DVector2 AM_GetPosition();
 int Net_GetLatency(int *ld, int *ad);
@@ -499,6 +497,24 @@ DEFINE_ACTION_FUNCTION_NATIVE(_Sector, RemoveForceField, RemoveForceField)
 	 return 0;
  }
 
+int WorldPaused(bool checkLag)
+{
+	if (paused || (checkLag && Net_IsWaiting()))
+		return true;
+
+	if (netgame || gamestate != GS_LEVEL)
+		return false;
+
+	return pauseext || menuactive == MENU_On || ConsoleState == c_down || ConsoleState == c_falling;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, WorldPaused, WorldPaused)
+{
+	PARAM_PROLOGUE;
+	PARAM_BOOL(checkLag);
+	ACTION_RETURN_BOOL(WorldPaused(checkLag));
+}
+
 static sector_t *PointInSectorXY(FLevelLocals *self, double x, double y)
 {
 	return self->PointInSector(x ,y);
@@ -901,7 +917,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(_Sector, SetXOffset, SetXOffset)
  {
 	 return self->PortalBlocksView(pos);
  }
- 
+
  DEFINE_ACTION_FUNCTION_NATIVE(_Sector, PortalBlocksView, PortalBlocksView)
  {
 	 PARAM_SELF_STRUCT_PROLOGUE(sector_t);
@@ -1316,7 +1332,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(_Sector, SetXOffset, SetXOffset)
 
  //===========================================================================
  //
- // side_t exports 
+ // side_t exports
  //
  //===========================================================================
 
@@ -1721,7 +1737,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(_Sector, SetXOffset, SetXOffset)
 	 PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
 	 ACTION_RETURN_BOOL(self->IsFreelookAllowed());
  }
- 
+
  //==========================================================================
 //
 // ZScript counterpart to ACS ChangeSky, uses TextureIDs
@@ -1735,6 +1751,45 @@ DEFINE_ACTION_FUNCTION_NATIVE(_Sector, SetXOffset, SetXOffset)
 	 self->skytexture1 = FSetTextureID(sky1);
 	 self->skytexture2 = FSetTextureID(sky2);
 	 InitSkyMap(self);
+	 return 0;
+ }
+
+ DEFINE_ACTION_FUNCTION(FLevelLocals, ChangeSkyMist)
+ {
+	 PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
+	 PARAM_INT(skymist);
+	 PARAM_BOOL(usemist);
+	 PARAM_FLOAT(skymistyscale);
+	 self->skymisttexture = FSetTextureID(skymist);
+	 if (usemist)
+	 {
+		 self->flags3 |= LEVEL3_SKYMIST;
+	 }
+	 else
+	 {
+		 self->flags3 &= ~LEVEL3_SKYMIST;
+	 }
+	 self->skymistyscale = clamp(skymistyscale, 0.002, 544.0);
+	 InitSkyMap(self);
+	 return 0;
+ }
+
+ DEFINE_ACTION_FUNCTION(FLevelLocals, SetSkyFog)
+ {
+	 PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
+	 PARAM_INT(fogdensity);
+	 self->skyfog = fogdensity;
+	 InitSkyMap(self);
+	 return 0;
+ }
+
+ DEFINE_ACTION_FUNCTION(FLevelLocals, SetThickFog)
+ {
+	 PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
+	 PARAM_FLOAT(distance);
+	 PARAM_FLOAT(multiplier);
+	 self->thickfogdistance = distance;
+	 if (multiplier > 0.0) self->thickfogmultiplier = multiplier;
 	 return 0;
  }
 
@@ -2108,21 +2163,6 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBaseStatusBar, DetachAllMessages, SBar_DetachAllM
 	return 0;
 }
 
-static void SBar_Draw(DBaseStatusBar *self, int state, double ticFrac)
-{
-	self->Draw((EHudState)state, ticFrac);
-}
-
-
-DEFINE_ACTION_FUNCTION_NATIVE(DBaseStatusBar, Draw, SBar_Draw)
-{
-	PARAM_SELF_PROLOGUE(DBaseStatusBar);
-	PARAM_INT(state);
-	PARAM_FLOAT(ticFrac);
-	self->Draw((EHudState)state, ticFrac);
-	return 0;
-}
-
 static void SetMugshotState(DBaseStatusBar *self, const FString &statename, bool wait, bool reset)
 {
 	self->mugshot.SetState(statename.GetChars(), wait, reset);
@@ -2375,6 +2415,13 @@ DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, GetUDMFString, ZGetUDMFString)
 	ACTION_RETURN_STRING(GetUDMFString(self, type, index, key));
 }
 
+DEFINE_ACTION_FUNCTION(FLevelLocals, PlayerNum)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
+	PARAM_POINTER(player, player_t);
+	ACTION_RETURN_INT(self->PlayerNum(player));
+}
+
 DEFINE_ACTION_FUNCTION(FLevelLocals, GetChecksum)
 {
 	PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
@@ -2483,18 +2530,18 @@ template <typename T>
 inline T VecDiff(FLevelLocals *Level, const T& v1, const T& v2)
 {
 	T result = v2 - v1;
-	
+
 	if (Level->subsectors.Size() > 0)
 	{
 		const sector_t * sec1 = Level->PointInSector(v1);
 		const sector_t * sec2 = Level->PointInSector(v2);
-		
+
 		if (nullptr != sec1 && nullptr != sec2)
 		{
 			result += Level->Displacements.getOffset(sec2->PortalGroup, sec1->PortalGroup);
 		}
 	}
-	
+
 	return result;
 }
 
@@ -2555,11 +2602,11 @@ DEFINE_ACTION_FUNCTION(FLevelLocals, GetPortalGroupCount)
 
 void SphericalCoords(FLevelLocals *self, double vpX, double vpY, double vpZ, double tX, double tY, double tZ, double viewYaw, double viewPitch, int absolute, DVector3 *result)
 {
-	
+
 	DVector3 viewpoint(vpX, vpY, vpZ);
 	DVector3 target(tX, tY, tZ);
 	auto vecTo = absolute ? target - viewpoint : VecDiff(self, viewpoint, target);
-	
+
 	*result = (DVector3(
 								deltaangle(vecTo.Angle(), DAngle::fromDeg(viewYaw)).Degrees(),
 								deltaangle(vecTo.Pitch(), DAngle::fromDeg(viewPitch)).Degrees(),
@@ -2620,6 +2667,56 @@ DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, setFrozen, setFrozen)
 	PARAM_BOOL(on);
 	setFrozen(self, on);
 	return 0;
+}
+
+static DThinker* CreateThinker(FLevelLocals* self, PClass* type, int statnum)
+{
+	if (type->IsDescendantOf(NAME_Actor))
+	{
+		ThrowAbortException(X_OTHER, "Actors cannot be created from this function");
+		return nullptr;
+	}
+	else if (type->IsDescendantOf(NAME_VisualThinker))
+	{
+		ThrowAbortException(X_OTHER, "VisualThinkers cannot be created from this function");
+		return nullptr;
+	}
+
+	return self->CreateThinker(type, statnum);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, CreateThinker, CreateThinker)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
+	PARAM_POINTER_NOT_NULL(type, PClass);
+	PARAM_INT(statnum);
+
+	ACTION_RETURN_OBJECT(CreateThinker(self, type, statnum));
+}
+
+static DThinker* CreateClientSideThinker(FLevelLocals* self, PClass* type, int statnum)
+{
+	if (type->IsDescendantOf(NAME_Actor))
+	{
+		ThrowAbortException(X_OTHER, "Actors cannot be created from this function");
+		return nullptr;
+	}
+	else if (type->IsDescendantOf(NAME_VisualThinker))
+	{
+		ThrowAbortException(X_OTHER, "VisualThinkers cannot be created from this function");
+		return nullptr;
+	}
+
+	return self->CreateClientSideThinker(type, statnum);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, CreateClientSideThinker, CreateClientSideThinker)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
+	PARAM_POINTER_NOT_NULL(type, PClass);
+	PARAM_INT(statnum);
+
+	ACTION_RETURN_OBJECT(CreateClientSideThinker(self, type, statnum));
 }
 
 //=====================================================================================
@@ -2797,6 +2894,7 @@ DEFINE_FIELD_X(LevelInfo, level_info_t, NextMap)
 DEFINE_FIELD_X(LevelInfo, level_info_t, NextSecretMap)
 DEFINE_FIELD_X(LevelInfo, level_info_t, SkyPic1)
 DEFINE_FIELD_X(LevelInfo, level_info_t, SkyPic2)
+DEFINE_FIELD_X(LevelInfo, level_info_t, SkyMistPic)
 DEFINE_FIELD_X(LevelInfo, level_info_t, F1Pic)
 DEFINE_FIELD_X(LevelInfo, level_info_t, cluster)
 DEFINE_FIELD_X(LevelInfo, level_info_t, partime)
@@ -2812,6 +2910,8 @@ DEFINE_FIELD_X(LevelInfo, level_info_t, MapLabel)
 DEFINE_FIELD_X(LevelInfo, level_info_t, musicorder)
 DEFINE_FIELD_X(LevelInfo, level_info_t, skyspeed1)
 DEFINE_FIELD_X(LevelInfo, level_info_t, skyspeed2)
+DEFINE_FIELD_X(LevelInfo, level_info_t, skymistspeed)
+DEFINE_FIELD_X(LevelInfo, level_info_t, skymistyscale)
 DEFINE_FIELD_X(LevelInfo, level_info_t, cdtrack)
 DEFINE_FIELD_X(LevelInfo, level_info_t, gravity)
 DEFINE_FIELD_X(LevelInfo, level_info_t, aircontrol)
@@ -2822,6 +2922,8 @@ DEFINE_FIELD_X(LevelInfo, level_info_t, deathsequence)
 DEFINE_FIELD_X(LevelInfo, level_info_t, fogdensity)
 DEFINE_FIELD_X(LevelInfo, level_info_t, outsidefogdensity)
 DEFINE_FIELD_X(LevelInfo, level_info_t, skyfog)
+DEFINE_FIELD_X(LevelInfo, level_info_t, thickfogdistance)
+DEFINE_FIELD_X(LevelInfo, level_info_t, thickfogmultiplier)
 DEFINE_FIELD_X(LevelInfo, level_info_t, pixelstretch)
 DEFINE_FIELD_X(LevelInfo, level_info_t, RedirectType)
 DEFINE_FIELD_X(LevelInfo, level_info_t, RedirectMapName)
@@ -2855,8 +2957,11 @@ DEFINE_FIELD(FLevelLocals, Music)
 DEFINE_FIELD(FLevelLocals, musicorder)
 DEFINE_FIELD(FLevelLocals, skytexture1)
 DEFINE_FIELD(FLevelLocals, skytexture2)
+DEFINE_FIELD(FLevelLocals, skymisttexture)
 DEFINE_FIELD(FLevelLocals, skyspeed1)
 DEFINE_FIELD(FLevelLocals, skyspeed2)
+DEFINE_FIELD(FLevelLocals, skymistspeed)
+DEFINE_FIELD(FLevelLocals, skymistyscale)
 DEFINE_FIELD(FLevelLocals, total_secrets)
 DEFINE_FIELD(FLevelLocals, found_secrets)
 DEFINE_FIELD(FLevelLocals, total_items)
@@ -2871,6 +2976,8 @@ DEFINE_FIELD(FLevelLocals, teamdamage)
 DEFINE_FIELD(FLevelLocals, fogdensity)
 DEFINE_FIELD(FLevelLocals, outsidefogdensity)
 DEFINE_FIELD(FLevelLocals, skyfog)
+DEFINE_FIELD(FLevelLocals, thickfogdistance)
+DEFINE_FIELD(FLevelLocals, thickfogmultiplier)
 DEFINE_FIELD(FLevelLocals, pixelstretch)
 DEFINE_FIELD(FLevelLocals, MusicVolume)
 DEFINE_FIELD(FLevelLocals, deathsequence)
@@ -2993,6 +3100,8 @@ DEFINE_FIELD(DBaseStatusBar, CPlayer);
 DEFINE_FIELD(DBaseStatusBar, ShowLog);
 DEFINE_FIELD(DBaseStatusBar, artiflashTick);
 DEFINE_FIELD(DBaseStatusBar, itemflashFade);
+DEFINE_FIELD(DBaseStatusBar, ScoreboardFont);
+DEFINE_FIELD(DBaseStatusBar, BigScoreboardFont);
 
 
 DEFINE_GLOBAL(StatusBar);

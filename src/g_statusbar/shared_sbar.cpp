@@ -1,71 +1,54 @@
 /*
 ** shared_sbar.cpp
+**
 ** Base status bar implementation
 **
 **---------------------------------------------------------------------------
-** Copyright 1998-2006 Randy Heit
+**
+** Copyright 1998-2016 Marisa Heit
 ** Copyright 2017 Christoph Oelckers
-** All rights reserved.
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
 **
-** Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions
-** are met:
+** SPDX-License-Identifier: GPL-3.0-or-later
 **
-** 1. Redistributions of source code must retain the above copyright
-**    notice, this list of conditions and the following disclaimer.
-** 2. Redistributions in binary form must reproduce the above copyright
-**    notice, this list of conditions and the following disclaimer in the
-**    documentation and/or other materials provided with the distribution.
-** 3. The name of the author may not be used to endorse or promote products
-**    derived from this software without specific prior written permission.
+**---------------------------------------------------------------------------
 **
-** THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-** IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-** OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-** IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
-** INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-** NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+** Code written prior to 2026 is also licensed under:
+**
+** SPDX-License-Identifier: BSD-3-Clause
+**
 **---------------------------------------------------------------------------
 **
 */
 
 #include <assert.h>
 
-
-#include "sbar.h"
 #include "c_cvars.h"
 #include "c_dispatch.h"
-#include "c_console.h"
-#include "v_video.h"
-#include "filesystem.h"
-#include "s_sound.h"
-#include "gi.h"
-#include "doomstat.h"
-#include "g_level.h"
+#include "cmdlib.h"
 #include "d_net.h"
 #include "d_player.h"
-#include "serializer.h"
-#include "serialize_obj.h"
-#include "r_utility.h"
-#include "cmdlib.h"
-#include "g_levellocals.h"
-#include "vm.h"
-#include "p_acs.h"
-#include "sbarinfo.h"
-#include "gstrings.h"
+#include "doomstat.h"
 #include "events.h"
+#include "filesystem.h"
 #include "g_game.h"
-#include "utf8.h"
+#include "g_levellocals.h"
+#include "gi.h"
+#include "gstrings.h"
+#include "p_acs.h"
+#include "r_utility.h"
+#include "s_sound.h"
+#include "sbar.h"
+#include "sbarinfo.h"
+#include "serialize_obj.h" // IWYU pragma: keep
+#include "serializer.h"
 #include "texturemanager.h"
-#include "v_palette.h"
 #include "v_draw.h"
-#include "m_fixed.h"
-
-#include "../version.h"
+#include "v_palette.h"
+#include "v_video.h"
+#include "version.h"
+#include "vm.h"
 
 #define XHAIRSHRINKSIZE		(1./18)
 #define XHAIRPICKUPSIZE		(2+XHAIRSHRINKSIZE)
@@ -90,8 +73,10 @@ EXTERN_CVAR(Bool, inter_subtitles)
 EXTERN_CVAR(Bool, ui_screenborder_classic_scaling)
 
 CVAR(Int, hud_scale, -1, CVAR_ARCHIVE);
-CVAR(Bool, log_vgafont, false, CVAR_ARCHIVE)
-CVAR(Bool, hud_oldscale, true, CVAR_ARCHIVE)
+CVAR(Bool, log_vgafont, false, CVAR_ARCHIVE);
+CVAR(Bool, hud_oldscale, true, CVAR_ARCHIVE);
+CVAR(Float, crosshair_offset_x, 0., CVAR_ARCHIVE);
+CVAR(Float, crosshair_offset_y, 0., CVAR_ARCHIVE);
 
 DBaseStatusBar *StatusBar;
 
@@ -123,7 +108,7 @@ EXTERN_CVAR(Float, hud_scalefactor)
 EXTERN_CVAR(Bool, hud_aspectscale)
 
 CVAR (Bool, crosshairon, true, CVAR_ARCHIVE);
-CVAR (Int, crosshair, 0, CVAR_ARCHIVE)
+CVAR (Int, crosshair, 1, CVAR_ARCHIVE)
 CVAR (Bool, crosshairforce, false, CVAR_ARCHIVE)
 CUSTOM_CVAR(Int, am_showmaplabel, 2, CVAR_ARCHIVE)
 {
@@ -448,8 +433,8 @@ void DBaseStatusBar::SetScale ()
 		int sby = VerticalResolution - RelTop;
 		float aspect = ActiveRatio(w, h);
 		if (!AspectTallerThanWide(aspect))
-		{ 
-			// Wider or equal than 4:3 
+		{
+			// Wider or equal than 4:3
 			SBarTop = Scale(sby, h, VerticalResolution);
 			double width4_3 = w * 1.333 / aspect;
 			ST_X = int((w - width4_3) / 2);
@@ -538,7 +523,7 @@ void DBaseStatusBar::DoDrawAutomapHUD(int crdefault, int highlight)
 	auto scalev = GetHUDScale();
 	int vwidth = int(twod->GetWidth() / scalev.X);
 	int vheight = int(twod->GetHeight() / scalev.Y);
-	
+
 	auto font = generic_ui ? NewSmallFont : SmallFont;
 	auto font2 = font;
 	auto fheight = font->GetHeight();
@@ -682,31 +667,34 @@ int DBaseStatusBar::GetPlayer ()
 
 void DBaseStatusBar::Tick ()
 {
-	PrevCrosshairSize = CrosshairSize;
-
-	for (size_t i = 0; i < countof(Messages); ++i)
+	if (!WorldPaused(false))
 	{
-		DHUDMessageBase *msg = Messages[i];
+		PrevCrosshairSize = CrosshairSize;
 
-		while (msg)
+		for (size_t i = 0; i < countof(Messages); ++i)
 		{
-			DHUDMessageBase *next = msg->Next;
+			DHUDMessageBase* msg = Messages[i];
 
-			if (msg->CallTick ())
+			while (msg)
 			{
-				DetachMessage(msg);
-				msg->Destroy();
+				DHUDMessageBase* next = msg->Next;
+
+				if (msg->CallTick())
+				{
+					DetachMessage(msg);
+					msg->Destroy();
+				}
+				msg = next;
 			}
-			msg = next;
-		}
 
-		// If the crosshair has been enlarged, shrink it.
-		if (CrosshairSize > 1.)
-		{
-			CrosshairSize -= XHAIRSHRINKSIZE;
-			if (CrosshairSize < 1.)
+			// If the crosshair has been enlarged, shrink it.
+			if (CrosshairSize > 1.)
 			{
-				CrosshairSize = 1.;
+				CrosshairSize -= XHAIRSHRINKSIZE;
+				if (CrosshairSize < 1.)
+				{
+					CrosshairSize = 1.;
+				}
 			}
 		}
 	}
@@ -913,7 +901,7 @@ void DBaseStatusBar::RefreshViewBorder ()
 		DrawBorder(twod, tex, 0, viewwindowy, viewwindowx, viewheight + viewwindowy);
 		DrawBorder(twod, tex, viewwindowx + viewwidth, viewwindowy, Width, viewheight + viewwindowy);
 		DrawBorder(twod, tex, 0, viewwindowy + viewheight, Width, StatusBar->GetTopOfStatusbar());
-		
+
 		V_DrawFrame(twod, viewwindowx, viewwindowy, viewwidth, viewheight, ui_screenborder_classic_scaling);
 	}
 }
@@ -931,7 +919,7 @@ void DBaseStatusBar::RefreshBackground () const
 	float ratio = ActiveRatio (twod->GetWidth(), twod->GetHeight());
 	x = ST_X;
 	y = SBarTop;
-	
+
 	if (x == 0 && y == twod->GetHeight()) return;
 
 	auto tex = GetBorderTexture(primaryLevel);
@@ -987,6 +975,18 @@ void DBaseStatusBar::RefreshBackground () const
 	}
 }
 
+static void RefreshBackground(DBaseStatusBar* self)
+{
+	self->RefreshBackground();
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DBaseStatusBar, RefreshBackground, RefreshBackground)
+{
+	PARAM_SELF_PROLOGUE(DBaseStatusBar);
+	self->RefreshBackground();
+	return 0;
+}
+
 //---------------------------------------------------------------------------
 //
 // DrawCrosshair
@@ -1016,7 +1016,22 @@ void DBaseStatusBar::DrawCrosshair (double ticFrac)
 	int health = Scale(CPlayer->health, 100, CPlayer->mo->GetDefault()->health);
 
 	const double size = PrevCrosshairSize * (1.0 - ticFrac) + CrosshairSize * ticFrac;
-	ST_DrawCrosshair(health, viewwidth / 2 + viewwindowx, viewheight / 2 + viewwindowy, size);
+	const double x = viewwindowx + (0.5+crosshair_offset_x/2)*viewwidth;
+	const double y = viewwindowy + (0.5-crosshair_offset_y/2)*viewheight;
+	ST_DrawCrosshair(health, x, y, size);
+}
+
+static void DrawCrosshair(DBaseStatusBar* self, double ticFrac)
+{
+	self->DrawCrosshair(ticFrac);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DBaseStatusBar, DrawCrosshair, DrawCrosshair)
+{
+	PARAM_SELF_PROLOGUE(DBaseStatusBar);
+	PARAM_FLOAT(ticFrac);
+	self->DrawCrosshair(ticFrac);
+	return 0;
 }
 
 //---------------------------------------------------------------------------
@@ -1063,44 +1078,6 @@ void DBaseStatusBar::DrawMessages (int layer, int bottom)
 //
 //---------------------------------------------------------------------------
 
-void DBaseStatusBar::Draw (EHudState state, double ticFrac)
-{
-	// HUD_AltHud state is for popups only
-	if (state == HUD_AltHud)
-		return;
-
-	if (state == HUD_StatusBar)
-	{
-		RefreshBackground ();
-	}
-
-	if (idmypos)
-	{ 
-		// Draw current coordinates
-		IFVIRTUAL(DBaseStatusBar, DrawMyPos)
-		{
-			VMValue params[] = { (DObject*)this };
-			VMCall(func, params, countof(params), nullptr, 0);
-		}
-	}
-
-	if (viewactive)
-	{
-		if (CPlayer && CPlayer->camera && CPlayer->camera->player)
-		{
-			DrawCrosshair (ticFrac);
-		}
-	}
-	else if (automapactive)
-	{
-		IFVIRTUAL(DBaseStatusBar, DrawAutomapHUD)
-		{
-			VMValue params[] = { (DObject*)this, r_viewpoint.TicFrac };
-			VMCall(func, params, countof(params), nullptr, 0);
-		}
-	}
-}
-
 void DBaseStatusBar::CallDraw(EHudState state, double ticFrac)
 {
 	IFVIRTUAL(DBaseStatusBar, Draw)
@@ -1108,7 +1085,6 @@ void DBaseStatusBar::CallDraw(EHudState state, double ticFrac)
 		VMValue params[] = { (DObject*)this, state, ticFrac };
 		VMCall(func, params, countof(params), nullptr, 0);
 	}
-	else Draw(state, ticFrac);
 	twod->ClearClipRect();	// make sure the scripts don't leave a valid clipping rect behind.
 	BeginStatusBar(BaseSBarHorizontalResolution, BaseSBarVerticalResolution, BaseRelTop, false);
 }
@@ -1147,7 +1123,7 @@ void DBaseStatusBar::DrawLog ()
 			if (y<0) y=0;
 			w=600;
 		}
-		Dim(twod, 0, 0.5f, Scale(x, twod->GetWidth(), hudwidth), Scale(y, twod->GetHeight(), hudheight), 
+		Dim(twod, 0, 0.5f, Scale(x, twod->GetWidth(), hudwidth), Scale(y, twod->GetHeight(), hudheight),
 							 Scale(w, twod->GetWidth(), hudwidth), Scale(height, twod->GetHeight(), hudheight));
 		x+=20;
 		y+=10;
@@ -1231,33 +1207,42 @@ void DBaseStatusBar::DrawTopStuff (EHudState state)
 	DrawMessages (HUDMSGLayer_OverHUD, (state == HUD_StatusBar) ? GetTopOfStatusbar() : twod->GetHeight());
 	primaryLevel->localEventManager->RenderOverlay(state);
 
-	DrawConsistancy ();
-	DrawWaiting ();
+	double yOfs = DrawConsistancy (0.0);
+	DrawWaiting (yOfs);
 	if ((ShowLog && MustDrawLog(state)) || (inter_subtitles && CPlayer->SubtitleCounter > 0)) DrawLog ();
 }
 
 
-void DBaseStatusBar::DrawConsistancy () const
+double DBaseStatusBar::DrawConsistancy(double yOfs) const
 {
 	if (!netgame)
-		return;
+		return yOfs;
 
 	bool desync = false;
 	FString text = "Out of sync with:";
-	for (int i = 0; i < MAXPLAYERS; i++)
+	for (auto client : NetworkClients)
 	{
-		if (playeringame[i] && players[i].inconsistant)
+		if (players[client].inconsistant)
 		{
 			desync = true;
-			text.AppendFormat(" %s (%d)", players[i].userinfo.GetName(10u), i + 1);
+			// Fell out of sync with the host in packet server mode. Which specific user it is doesn't really matter.
+			if (consoleplayer != Net_Arbitrator)
+			{
+				text = "Out of sync with host";
+				break;
+			}
+			else
+			{
+				text.AppendFormat(" %s (%d)", players[client].userinfo.GetName(10u), client);
+			}
 		}
 	}
 
+	double y = yOfs;
 	if (desync)
 	{
 		auto lines = V_BreakLines(SmallFont, twod->GetWidth() / CleanXfac - 40, text.GetChars());
 		const int height = SmallFont->GetHeight() * CleanYfac;
-		double y = 0.0;
 		for (auto& line : lines)
 		{
 			DrawText(twod, SmallFont, CR_GREEN,
@@ -1266,29 +1251,39 @@ void DBaseStatusBar::DrawConsistancy () const
 			y += height;
 		}
 	}
+
+	return y;
 }
 
-void DBaseStatusBar::DrawWaiting () const
+double DBaseStatusBar::DrawWaiting(double yOfs) const
 {
 	if (!netgame)
-		return;
+		return yOfs;
 
 	FString text = "Waiting for:";
 	bool isWaiting = false;
-	for (int i = 0; i < MAXPLAYERS; i++)
+	for (auto client : NetworkClients)
 	{
-		if (playeringame[i] && players[i].waiting)
+		if (players[client].waiting)
 		{
 			isWaiting = true;
-			text.AppendFormat(" %s (%d)", players[i].userinfo.GetName(10u), i + 1);
+			if (consoleplayer != Net_Arbitrator)
+			{
+				text = "Waiting for host";
+				break;
+			}
+			else
+			{
+				text.AppendFormat(" %s (%d)", players[client].userinfo.GetName(10u), client);
+			}
 		}
 	}
 
+	double y = yOfs;
 	if (isWaiting)
 	{
 		auto lines = V_BreakLines(SmallFont, twod->GetWidth() / CleanXfac - 40, text.GetChars());
 		const int height = SmallFont->GetHeight() * CleanYfac;
-		double y = 0.0;
 		for (auto& line : lines)
 		{
 			DrawText(twod, SmallFont, CR_ORANGE,
@@ -1297,6 +1292,8 @@ void DBaseStatusBar::DrawWaiting () const
 			y += height;
 		}
 	}
+
+	return y;
 }
 
 void DBaseStatusBar::NewGame ()
@@ -1474,4 +1471,3 @@ int GetInventoryIcon(AActor *item, uint32_t flags, int *applyscale)
 	}
 	return picnum.GetIndex();
 }
-

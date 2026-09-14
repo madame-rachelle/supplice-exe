@@ -1,29 +1,22 @@
-//-----------------------------------------------------------------------------
-//
-// Copyright 1993-1996 id Software
-// Copyright 1994-1996 Raven Software
-// Copyright 1999-2016 Randy Heit
-// Copyright 2002-2018 Christoph Oelckers
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/
-//
-//-----------------------------------------------------------------------------
-//
-// DESCRIPTION:
-//
-//-----------------------------------------------------------------------------
-
+/*
+** p_setup.cpp
+**
+** Setup a game, startup stuff.
+**
+**---------------------------------------------------------------------------
+**
+** Copyright 1993-1996 id Software
+** Copyright 1994-1996 Raven Software
+** Copyright 1999-2016 Marisa Heit
+** Copyright 2002-2016 Christoph Oelckers
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
+**
+** SPDX-License-Identifier: GPL-3.0-or-later
+**
+**---------------------------------------------------------------------------
+**
+*/
 
 #include <math.h>
 #ifdef _MSC_VER
@@ -212,6 +205,10 @@ static void PrecacheLevel(FLevelLocals *Level)
 	{
 		AddToList(hitlist.Data(), Level->skytexture2, FTextureManager::HIT_Sky);
 	}
+	if (Level->skymisttexture.isValid())
+	{
+		AddToList(hitlist.Data(), Level->skymisttexture, FTextureManager::HIT_Sky);
+	}
 
 	static const BITFIELD checkForTextureFlags = FTextureManager::TEXMAN_Overridable | FTextureManager::TEXMAN_TryAny | FTextureManager::TEXMAN_ReturnFirst | FTextureManager::TEXMAN_DontCreate;
 
@@ -286,44 +283,42 @@ void FLevelLocals::ClearPortals()
 void FLevelLocals::ClearLevelData(bool fullgc)
 {
 	{
-		auto it = GetThinkerIterator<AActor>(NAME_None, STAT_TRAVELLING);
-		for (AActor *actor = it.Next(); actor != nullptr; actor = it.Next())
-		{
-			actor->BlockingMobj = nullptr;
-			actor->BlockingLine = actor->MovementBlockingLine = nullptr;
-			actor->BlockingFloor = actor->BlockingCeiling = actor->Blocking3DFloor = nullptr;
-		}
-
 		// Make sure map data gets cleared appropriately so any leftover Objects aren't pointing
 		// towards anything invalid.
 		FName fieldTypes[] = { NAME_SectorPortal, NAME_LinePortal, NAME_Vertex, NAME_Side, NAME_Line, NAME_SecPlane, NAME_F3DFloor, NAME_Sector };
 		for (DObject* probe = GC::Root; probe != nullptr; probe = probe->ObjNext)
 			probe->ClearNativePointerFields({ fieldTypes, std::size(fieldTypes) });
 	}
-	
+
+	TravellingThinkers.Clear();
 	interpolator.ClearInterpolations();	// [RH] Nothing to interpolate on a fresh level.
 	Thinkers.DestroyAllThinkers(fullgc);
+	ClientSideThinkers.DestroyAllThinkers(fullgc);
 	ClearAllSubsectorLinks(); // can't be done as part of the polyobj deletion process.
 
 	total_monsters = total_items = total_secrets =
 	killed_monsters = found_items = found_secrets = 0;
+	LocalTimer = LocalWorldTimer = 0;
+	sky1pos = sky2pos = 0.0;
+	hw_sky1pos = hw_sky2pos = hw_skymistpos = 0.0;
+	TexAnim.ResetTimers();
 
-	max_velocity = avg_velocity = 0;
+	ClearVelocities();
 
 	for (int i = 0; i < 4; i++)
 	{
 		UDMFKeys[i].Clear();
 	}
-	
+
 	SN_StopAllSequences(this);
 
 	FStrifeDialogueNode *node;
-	
+
 	while (StrifeDialogues.Pop (node))
 	{
 		delete node;
 	}
-	
+
 	DialogueRoots.Clear();
 	ClassRoots.Clear();
 
@@ -338,6 +333,7 @@ void FLevelLocals::ClearLevelData(bool fullgc)
 	if (SpotState) SpotState->Destroy();
 	SpotState = nullptr;
 	ACSThinker = nullptr;
+	ClientSideACSThinker = nullptr;
 	FraggleScriptThinker = nullptr;
 	CorpseQueue.Clear();
 	canvasTextureInfo.EmptyList();
@@ -387,6 +383,8 @@ void FLevelLocals::ClearLevelData(bool fullgc)
 	aabbTree = nullptr;
 	levelMesh = nullptr;
 	VisualThinkerHead = nullptr;
+	ActorBehaviors.Clear();
+	ClientSideActorBehaviors.Clear();
 	if (screen)
 		screen->SetAABBTree(nullptr);
 }
@@ -416,9 +414,9 @@ void P_FreeLevelData (bool fullgc)
 //
 //===========================================================================
 
-void P_SetupLevel(FLevelLocals *Level, int position, bool newGame, int mapVersion)
+void P_SetupLevel(FLevelLocals *Level, int position, bool newGame)
 {
-	int i;
+	unsigned int i;
 
 	Level->ShaderStartTime = I_msTimeFS(); // indicate to the shader system that the level just started
 
@@ -463,7 +461,7 @@ void P_SetupLevel(FLevelLocals *Level, int position, bool newGame, int mapVersio
 	// Free all level data from the previous map
 	P_FreeLevelData();
 
-	MapData *map = P_OpenMapData(Level->MapName.GetChars(), true, mapVersion);
+	MapData *map = P_OpenMapData(Level->MapName.GetChars(), true);
 	if (map == nullptr)
 	{
 		I_Error("Unable to open map '%s'\n", Level->MapName.GetChars());
@@ -477,7 +475,6 @@ void P_SetupLevel(FLevelLocals *Level, int position, bool newGame, int mapVersio
 	map->GetChecksum(Level->md5);
 	// find map num
 	Level->lumpnum = map->lumpnum;
-	Level->mapVersion = map->version;
 
 	if (newGame)
 	{
@@ -651,6 +648,7 @@ void P_Shutdown ()
 	for (auto Level : AllLevels())
 	{
 		Level->Thinkers.DestroyThinkersInList(STAT_STATIC);
+		Level->ClientSideThinkers.DestroyThinkersInList(STAT_STATIC);
 	}
 	P_FreeLevelData ();
 	// [ZZ] delete global event handlers
@@ -679,7 +677,7 @@ CCMD(dumpgeometry)
 			for (int j = 0; j<sector.subsectorcount; j++)
 			{
 				subsector_t * sub = sector.subsectors[j];
-				
+
 				Printf(PRINT_LOG, "    Subsector %d - real sector = %d - %s\n", int(sub->Index()), sub->sector->sectornum, sub->hacked & 1 ? "hacked" : "");
 				for (uint32_t k = 0; k<sub->numlines; k++)
 				{
@@ -704,7 +702,7 @@ CCMD(dumpgeometry)
 					{
 						Printf(PRINT_LOG, ", back sector = %d (no partnerseg)", seg->backsector->sectornum);
 					}
-					
+
 					Printf(PRINT_LOG, "\n");
 				}
 			}
@@ -764,4 +762,3 @@ CUSTOM_CVAR(Bool, forcewater, false, CVAR_ARCHIVE | CVAR_SERVERINFO)
 		}
 	}
 }
-

@@ -1,23 +1,21 @@
-//-----------------------------------------------------------------------------
-//
-// Copyright 1993-1996 id Software
-// Copyright 1999-2016 Randy Heit
-// Copyright 2016 Magnus Norddahl
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/
-//
-//-----------------------------------------------------------------------------
+/*
+** r_visiblesprite.cpp
+**
+**
+**
+**---------------------------------------------------------------------------
+**
+** Copyright 1993-1996 id Software
+** Copyright 1999-2016 Marisa Heit
+** Copyright 2016 Magnus Norddahl
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
+**
+** SPDX-License-Identifier: GPL-3.0-or-later
+**
+**---------------------------------------------------------------------------
+**
+*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -179,7 +177,7 @@ namespace swrenderer
 		// killough 3/27/98:
 		// Clip the sprite against deep water and/or fake ceilings.
 		// [RH] rewrote this to be based on which part of the sector is really visible
-		
+
 		auto viewport = thread->Viewport.get();
 
 		double scale = viewport->InvZtoScale * spr->idepth;
@@ -354,7 +352,7 @@ namespace swrenderer
 			if (group.x1 >= x2 || group.x2 <= x1 || group.neardepth > spr->depth)
 				continue;
 
-			if (group.fardepth < spr->depth) 
+			if (group.fardepth < spr->depth)
 			{
 				int r1 = max<int>(group.x1, x1);
 				int r2 = min<int>(group.x2, x2);

@@ -1,9 +1,33 @@
+/*
+** gametexture.h
+**
+** The game-facing texture class.
+**
+**---------------------------------------------------------------------------
+**
+** Copyright 2004-2016 Marisa Heit
+** Copyright 2006-2020 Christoph Oelckers
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
+**
+** SPDX-License-Identifier: GPL-3.0-or-later
+**
+**---------------------------------------------------------------------------
+**
+** Code written prior to 2026 is also licensed under:
+**
+** SPDX-License-Identifier: BSD-3-Clause
+**
+**---------------------------------------------------------------------------
+**
+*/
+
 #pragma once
+
 #include <cstdint>
 #include <memory>
 
 #include "floatrect.h"
-
 #include "palentry.h"
 #include "refcounted.h"
 #include "textureid.h"
@@ -147,10 +171,10 @@ public:
 	void SetSpriteRect();
 
 	ETextureType GetUseType() const { return UseType; }
-	void SetUpscaleFlag(int what, bool manual = false) 
-	{ 
+	void SetUpscaleFlag(int what, bool manual = false)
+	{
 		if ((shouldUpscaleFlag & 2) && !manual) return;	// if set manually this may not be reset.
-		shouldUpscaleFlag = what | (manual? 2 : 0); 
+		shouldUpscaleFlag = what | (manual? 2 : 0);
 	}
 	int GetUpscaleFlag() { return shouldUpscaleFlag & 1; }
 
@@ -163,7 +187,7 @@ public:
 	float GetDisplayLeftOffset(int adjusted = 0) const { return LeftOffset[adjusted] / ScaleX; }
 	float GetDisplayTopOffset(int adjusted = 0) const { return TopOffset[adjusted] / ScaleY; }
 
-	bool isMiscPatch() const { return GetUseType() == ETextureType::MiscPatch; }	// only used by the intermission screen to decide whether to tile the background image or not. 
+	bool isMiscPatch() const { return GetUseType() == ETextureType::MiscPatch; }	// only used by the intermission screen to decide whether to tile the background image or not.
 	bool isFullbrightDisabled() const { return !!(flags & GTexf_DisableFullbrightSprites); }
 	bool isFullbright() const { return !!(flags & GTexf_RenderFullbright); }
 	bool isFullNameTexture() const { return !!(flags & GTexf_FullNameTexture); }
@@ -190,9 +214,9 @@ public:
 	void SetSkyOffset(int offs) { SkyOffset = offs; }
 	int GetSkyOffset() const { return SkyOffset; }
 	void setSeen() { flags |= GTexf_Seen; }
-	bool isSeen(bool reset) 
-	{ 
-		int v = flags & GTexf_Seen;   
+	bool isSeen(bool reset)
+	{
+		int v = flags & GTexf_Seen;
 		if (reset) flags &= ~GTexf_Seen;
 		return v;
 	}
@@ -273,23 +297,23 @@ public:
 
 	bool isUserContent() const;
 	int CheckRealHeight() { return RoundHalfUp(Base->CheckRealHeight() / ScaleY); }
-	void SetSize(int x, int y)
-	{
-		TexelWidth = x;
+	void SetSize(int x, int y) 
+	{ 
+		TexelWidth = x; 
 		TexelHeight = y;
 		SetDisplaySize(float(x), float(y));
 		if (GetTexture()) GetTexture()->SetSize(x, y);
 	}
-	void SetDisplaySize(float w, float h) 
-	{ 
+	void SetDisplaySize(float w, float h)
+	{
 		DisplayWidth = w;
 		DisplayHeight = h;
 		ScaleX = TexelWidth / w;
 		ScaleY = TexelHeight / h;
 
 		// compensate for roundoff errors
-		if (int(ScaleX * w) != TexelWidth) ScaleX += (1 / 65536.);
-		if (int(ScaleY * h) != TexelHeight) ScaleY += (1 / 65536.);
+		if (int(ScaleX * w) != TexelWidth) ScaleX += EQUAL_EPSILON;
+		if (int(ScaleY * h) != TexelHeight) ScaleY += EQUAL_EPSILON;
 
 	}
 	void SetBase(FTexture* Tex)
@@ -308,7 +332,7 @@ public:
 		LeftOffset[1] = x;
 		TopOffset[1] = y;
 	}
-	void SetScale(float x, float y) 
+	void SetScale(float x, float y)
 	{
 		ScaleX = x;
 		ScaleY = y;

@@ -4,32 +4,20 @@
 ** creates the data structures needed to load a map from the resource files.
 **
 **---------------------------------------------------------------------------
+**
+** Copyright 2005-2016 Marisa Heit
 ** Copyright 2005-2018 Christoph Oelckers
-** Copyright 2005-2016 Randy Heit
-** All rights reserved.
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
 **
-** Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions
-** are met:
+** SPDX-License-Identifier: GPL-3.0-or-later
 **
-** 1. Redistributions of source code must retain the above copyright
-**    notice, this list of conditions and the following disclaimer.
-** 2. Redistributions in binary form must reproduce the above copyright
-**    notice, this list of conditions and the following disclaimer in the
-**    documentation and/or other materials provided with the distribution.
-** 3. The name of the author may not be used to endorse or promote products
-**    derived from this software without specific prior written permission.
+**---------------------------------------------------------------------------
 **
-** THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-** IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-** OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-** IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
-** INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-** NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+** Code written prior to 2026 is also licensed under:
+**
+** SPDX-License-Identifier: BSD-3-Clause
+**
 **---------------------------------------------------------------------------
 **
 */
@@ -67,7 +55,7 @@ struct checkstruct
 
 static int GetMapIndex(const char *mapname, int lastindex, const char *lumpname, bool needrequired)
 {
-	static const checkstruct check[] = 
+	static const checkstruct check[] =
 	{
 		{"",		 true},
 		{"THINGS",	 true},
@@ -105,42 +93,18 @@ static int GetMapIndex(const char *mapname, int lastindex, const char *lumpname,
 	return -1;	// End of map reached
 }
 
-static int GetMaxMapVersion(FString mapname)
-{
-
-    FString fmt;
-    int lwad = -1, lname = -1, max = 0;
-
-    fmt.Format("maps/%s.wad", mapname);
-    FString lmapname = mapname;
-
-    for (int x = 1; x < 50; x++) {
-        FString nMapName;
-        nMapName.Format("%sV%d", mapname.GetChars(), x);
-        if (nMapName.Len() <= 8) lname = fileSystem.CheckNumForName(nMapName.GetChars());
-        fmt.Format("maps/%s.wad", nMapName.GetChars());
-        lwad = fileSystem.CheckNumForFullName(fmt.GetChars());
-
-        if (lname >= 0 || lwad >= 0) {
-            lmapname = nMapName;
-            max = x;
-        }
-    }
-    return max;
-}
-
 //===========================================================================
 //
 // Opens a map for reading
 //
 //===========================================================================
 
-MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
+MapData *P_OpenMapData(const char * mapname, bool justcheck)
 {
 	MapData * map = new MapData;
 	FileReader * wadReader = nullptr;
 	bool externalfile = !strnicmp(mapname, "file:", 5);
-	
+
 	if (externalfile)
 	{
 		mapname += 5;
@@ -155,51 +119,18 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 	else
 	{
 		FString fmt;
-		int lump_wad = -1;
-		int lump_map = -1;
+		int lump_wad;
+		int lump_map;
 		int lump_name = -1;
-		
-		FString fMapname(mapname);
 
-
-		int maxVersion = GetMaxMapVersion(mapname);
-
-		if (forceVersion == (maxVersion + 1)) // the current prime map (E1M1.wad) is the current max version + 1
-		{
-			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
-			fmt.Format("maps/%s.wad", mapname);
-			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
-			map->version = maxVersion + 1;
-		}
-		else if (forceVersion > 0) {
-			// Force a specific version and error out if it doesn't exist
-			FString nMapName;
-			nMapName.Format("%sV%d", fMapname.GetChars(), forceVersion);
-			if (nMapName.Len() <= 8) lump_name = fileSystem.CheckNumForName(nMapName.GetChars());
-			fmt.Format("maps/%s.wad", nMapName.GetChars());
-			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
-			fMapname = nMapName;
-			map->version = forceVersion;
-		}
-		else if (forceVersion < 0) { // -1 is a signal that this is a game load, and didn't have a map version in the save. It should be V1 - but try the prime map as well (non-Supplice maps?) 
-			
-			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
-			fmt.Format("maps/%sV1.wad", fMapname.GetChars());
-			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
-			if (lump_wad < 0)
-			{
-				fmt.Format("maps/%s.wad", fMapname.GetChars());
-				lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
-			}
-			map->version = 1;
-		}
-		else { // 0 - default, prime map.
-			if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
-			fmt.Format("maps/%s.wad", fMapname.GetChars());
-			lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
-			map->version = maxVersion + 1;
-		}
-
+		// Check for both *.wad and *.map in order to load Build maps
+		// as well. The higher one will take precedence.
+		// Names with more than 8 characters will only be checked as .wad and .map.
+		if (strlen(mapname) <= 8) lump_name = fileSystem.CheckNumForName(mapname);
+		fmt.Format("maps/%s.wad", mapname);
+		lump_wad = fileSystem.CheckNumForFullName(fmt.GetChars());
+		fmt.Format("maps/%s.map", mapname);
+		lump_map = fileSystem.CheckNumForFullName(fmt.GetChars());
 
 		if (lump_name > lump_wad && lump_name > lump_map && lump_name != -1)
 		{
@@ -238,7 +169,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 					const char * lumpname = fileSystem.GetFileFullName(lump_name + i);
 					try
 					{
-						index = GetMapIndex(fMapname.GetChars(), index, lumpname, !justcheck);
+						index = GetMapIndex(mapname, index, lumpname, !justcheck);
 					}
 					catch(...)
 					{
@@ -269,7 +200,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 
 					if (lumpname == NULL)
 					{
-						I_Error("Invalid map definition for %s", fMapname.GetChars());
+						I_Error("Invalid map definition for %s", mapname);
 					}
 					else if (!stricmp(lumpname, "ZNODES"))
 					{
@@ -331,7 +262,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 	// reading from a wad file.
 	wadReader->Seek(0, FileReader::SeekSet);
 	wadReader->Read(&id, sizeof(id));
-	
+
 	if (id == IWAD_ID || id == PWAD_ID)
 	{
 		char maplabel[9]="";
@@ -340,7 +271,7 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 		map->MapLumps[0].Reader = map->resource->GetEntryReader(0, FileSys::READER_SHARED);
 		uppercopy(map->MapLumps[0].Name, map->resource->getName(0));
 
-		for(uint32_t i = 1; i < map->resource->EntryCount(); i++)
+		for(uint32_t i = 1; i < map->resource->EntryCountU(); i++)
 		{
 			const char* lumpname = map->resource->getName(i);
 
@@ -429,12 +360,12 @@ MapData *P_OpenMapData(const char * mapname, bool justcheck, int forceVersion)
 			return NULL;
 		}
 	}
-	return map;		
+	return map;
 }
 
-bool P_CheckMapData(const char *mapname, int forceVersion)
+bool P_CheckMapData(const char *mapname)
 {
-	MapData *mapd = P_OpenMapData(mapname, true, forceVersion);
+	MapData *mapd = P_OpenMapData(mapname, true);
 	if (mapd == NULL) return false;
 	delete mapd;
 	return true;

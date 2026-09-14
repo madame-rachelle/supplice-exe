@@ -1,34 +1,23 @@
 /*
 ** s_sound.cpp
+**
 ** Main sound engine
 **
 **---------------------------------------------------------------------------
-** Copyright 1998-2016 Randy Heit
+**
+** Copyright 1998-2016 Marisa Heit
 ** Copyright 2002-2019 Christoph Oelckers
-** All rights reserved.
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
 **
-** Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions
-** are met:
+** SPDX-License-Identifier: GPL-3.0-or-later
 **
-** 1. Redistributions of source code must retain the above copyright
-**    notice, this list of conditions and the following disclaimer.
-** 2. Redistributions in binary form must reproduce the above copyright
-**    notice, this list of conditions and the following disclaimer in the
-**    documentation and/or other materials provided with the distribution.
-** 3. The name of the author may not be used to endorse or promote products
-**    derived from this software without specific prior written permission.
+**---------------------------------------------------------------------------
 **
-** THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-** IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-** OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-** IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
-** INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-** NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+** Code written prior to 2026 is also licensed under:
+**
+** SPDX-License-Identifier: BSD-3-Clause
+**
 **---------------------------------------------------------------------------
 **
 */
@@ -36,15 +25,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
-#include "s_soundinternal.h"
-#include "m_swap.h"
-#include "superfasthash.h"
-#include "s_music.h"
-#include "m_random.h"
-#include "printf.h"
 #include "c_cvars.h"
 #include "gamestate.h"
+#include "i_soundinternal.h"
+#include "m_haptics.h"
+#include "m_random.h"
+#include "m_swap.h"
+#include "printf.h"
+#include "s_music.h"
+#include "s_soundinternal.h"
 
 CVARD(Bool, snd_enabled, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG, "enables/disables sound effects")
 CVAR(Bool, i_soundinbackground, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -382,7 +371,7 @@ static float CalcPitch(int pitchmask, float defpitch, float defpitchmax)
 	{
 		if (defpitchmax > 0.0 && defpitch != defpitchmax)
 		{
-			defpitch = (float)pr_soundpitch.GenRand_Real1() * (defpitchmax - defpitch) + defpitch;
+			defpitch = (float)pr_soundpitch.RandomFloat() * (defpitchmax - defpitch) + defpitch;
 		}
 		return defpitch;
 	}
@@ -474,6 +463,11 @@ FSoundChan *SoundEngine::StartSound(int type, const void *source,
 
 	// Attenuate the attenuation based on the sound.
 	attenuation *= sfx->Attenuation;
+
+#if 0
+	// sound debug printout
+	Printf("sound: '%s' -> '%s' %g\n", soundEngine->GetSoundName(org_id), soundEngine->GetSoundName(sound_id), attenuation);
+#endif
 
 	// The passed rolloff overrides any sound-specific rolloff.
 	if (forcedrolloff != NULL && forcedrolloff->MinDistance != 0)
@@ -572,7 +566,7 @@ FSoundChan *SoundEngine::StartSound(int type, const void *source,
 	{
 		chan = NULL;
 	}
-	else 
+	else
 	{
 		int startflags = 0;
 		if (chanflags & CHANF_LOOP) startflags |= SNDF_LOOP;
@@ -607,6 +601,14 @@ FSoundChan *SoundEngine::StartSound(int type, const void *source,
 	else
 	{
 		chanflags |= CHANF_LISTENERZ | CHANF_JUSTSTARTED;
+	}
+	if (chanflags & CHANF_RUMBLE && !(chanflags & CHANF_NORUMBLE))
+	{
+		// I would love to use attenuation here, but it seems weird.
+		// Pistol's attenuation is always 1, but it's not silent.
+		// I'm not sure why that is.
+		// Joy_Rumble(soundEngine->GetSoundName(org_id), (chanflags&CHANF_IS3D)? attenuation: 0);
+		Joy_Rumble(soundEngine->GetSoundName(org_id));
 	}
 	if (chan != NULL)
 	{
@@ -689,8 +691,8 @@ void SoundEngine::RestartChannel(FSoundChan *chan)
 		}
 
 		chan->ChanFlags &= ~(CHANF_EVICTED|CHANF_ABSTIME);
-        ochan = (FSoundChan*)GSnd->StartSound3D(sfx->data, &listener, chan->Volume, &chan->Rolloff, chan->DistanceScale, chan->Pitch,
-            chan->Priority, pos, vel, chan->EntChannel, startflags, chan);
+		ochan = (FSoundChan*)GSnd->StartSound3D(sfx->data, &listener, chan->Volume, &chan->Rolloff, chan->DistanceScale, chan->Pitch,
+			chan->Priority, pos, vel, chan->EntChannel, startflags, chan);
 	}
 	else
 	{
@@ -1008,7 +1010,6 @@ void SoundEngine::RelinkSound (int sourcetype, const void *from, const void *to,
 		chan = next;
 	}
 }
-
 
 //==========================================================================
 //
@@ -1348,7 +1349,7 @@ void SoundEngine::ChannelEnded(FISoundChannel *ichan)
 			evicted = true;
 		}
 		else
-		{ 
+		{
 			unsigned int pos = GSnd->GetPosition(schan);
 			unsigned int len = GSnd->GetSampleLength(S_sfx[schan->SoundID.index()].data);
 			if (pos == 0)
@@ -1375,7 +1376,7 @@ void SoundEngine::ChannelEnded(FISoundChannel *ichan)
 
 //==========================================================================
 //
-// 
+//
 //
 //==========================================================================
 
@@ -1449,7 +1450,6 @@ void SoundEngine::Reset()
 	I_InitSound();
 	RestoreEvictedChannels();
 }
-
 
 //==========================================================================
 //
@@ -1560,7 +1560,6 @@ FSoundID SoundEngine::AddSoundLump(const char* logicalname, int lump, int Curren
 	return id;
 }
 
-
 //==========================================================================
 //
 // S_FindSoundTentative
@@ -1580,7 +1579,6 @@ FSoundID SoundEngine::FindSoundTentative(const char* name, int nearlimit)
 	}
 	return id;
 }
-
 
 //==========================================================================
 //
@@ -1694,7 +1692,6 @@ void SoundEngine::HashSounds()
 	}
 	S_rnd.ShrinkToFit();
 
-
 }
 
 void SoundEngine::AddRandomSound(FSoundID Owner, TArray<FSoundID> list)
@@ -1728,7 +1725,6 @@ void S_SoundReset()
 #include "i_net.h"
 #include "i_interface.h"
 
-
 CCMD(cachesound)
 {
 	if (argv.argc() < 2)
@@ -1745,7 +1741,6 @@ CCMD(cachesound)
 		}
 	}
 }
-
 
 CCMD(listsoundchannels)
 {
@@ -1844,8 +1839,6 @@ void S_SetSoundPaused(int state)
 	}
 }
 
-
-
 CCMD(snd_status)
 {
 	GSnd->PrintStatus();
@@ -1875,5 +1868,3 @@ ADD_STAT(sound)
 {
 	return GSnd->GatherStats();
 }
-
-

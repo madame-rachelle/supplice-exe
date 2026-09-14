@@ -1,27 +1,17 @@
-// 
-//---------------------------------------------------------------------------
-//
-// Copyright(C) 2004-2016 Christoph Oelckers
-// All rights reserved.
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/
-//
-//--------------------------------------------------------------------------
-//
 /*
-** gl_scene.cpp
+** hw_entrypoint.cpp
+**
 ** manages the rendering of the player's view
+**
+**---------------------------------------------------------------------------
+**
+** Copyright 2004-2016 Christoph Oelckers
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
+**
+** SPDX-License-Identifier: GPL-3.0-or-later
+**
+**---------------------------------------------------------------------------
 **
 */
 
@@ -288,16 +278,7 @@ void WriteSavePic(player_t* player, FileWriter* file, int width, int height)
 
 		// This shouldn't overwrite the global viewpoint even for a short time.
 		FRenderViewpoint savevp;
-		AActor* specialcam = players[consoleplayer].mo->master;
-		sector_t* viewsector;
-		if (specialcam)
-		{
-			viewsector = RenderViewpoint(savevp, specialcam, &bounds, r_viewpoint.FieldOfView.Degrees(), 1.6f, 1.6f, true, false);
-		}
-		else 
-		{
-			viewsector = RenderViewpoint(savevp, players[consoleplayer].camera, &bounds, r_viewpoint.FieldOfView.Degrees(), 1.6f, 1.6f, true, false);
-		}
+		sector_t* viewsector = RenderViewpoint(savevp, players[consoleplayer].camera, &bounds, r_viewpoint.FieldOfView.Degrees(), 1.6f, 1.6f, true, false);
 		RenderState.EnableStencil(false);
 		RenderState.SetNoSoftLightLevel();
 
@@ -333,6 +314,11 @@ sector_t* RenderView(player_t* player)
 	RenderState->SetVertexBuffer(screen->mVertexData);
 	screen->mVertexData->Reset();
 	hw_postprocess.SetTonemapMode(level.info ? level.info->tonemap : ETonemapMode::None);
+
+	if (level.flags3 & LEVEL3_NOAMBIENTOCCLUSION)
+	{
+		hw_postprocess.SetNoAmbientOcclusion();
+	}
 
 	sector_t* retsec;
 	if (!V_IsHardwareRenderer())
@@ -419,4 +405,3 @@ sector_t* RenderView(player_t* player)
 	All.Unclock();
 	return retsec;
 }
-

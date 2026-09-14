@@ -1,34 +1,23 @@
 /*
 ** p_saveg.cpp
+**
 ** Code for serializing the world state in an archive
 **
 **---------------------------------------------------------------------------
-** Copyright 1998-2016 Randy Heit
+**
+** Copyright 1998-2016 Marisa Heit
 ** Copyright 2005-2016 Christoph Oelckers
-** All rights reserved.
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
 **
-** Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions
-** are met:
+** SPDX-License-Identifier: GPL-3.0-or-later
 **
-** 1. Redistributions of source code must retain the above copyright
-**    notice, this list of conditions and the following disclaimer.
-** 2. Redistributions in binary form must reproduce the above copyright
-**    notice, this list of conditions and the following disclaimer in the
-**    documentation and/or other materials provided with the distribution.
-** 3. The name of the author may not be used to endorse or promote products
-**    derived from this software without specific prior written permission.
+**---------------------------------------------------------------------------
 **
-** THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-** IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-** OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-** IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
-** INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-** NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+** Code written prior to 2026 is also licensed under:
+**
+** SPDX-License-Identifier: BSD-3-Clause
+**
 **---------------------------------------------------------------------------
 **
 */
@@ -603,7 +592,7 @@ void FLevelLocals::SerializeSounds(FSerializer &arc)
 void FLevelLocals::SerializePlayers(FSerializer &arc, bool skipload)
 {
 	int numPlayers, numPlayersNow;
-	int i;
+	unsigned int i;
 
 	// Count the number of players present right now.
 	for (numPlayersNow = 0, i = 0; i < MAXPLAYERS; ++i)
@@ -690,7 +679,7 @@ void FLevelLocals::ReadOnePlayer(FSerializer &arc, bool fromHub)
 	player_t temp = {};
 	temp.Serialize(arc);
 
-	for (int i = 0; i < MAXPLAYERS; ++i)
+	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
 		if (!PlayerInGame(i))
 			continue;
@@ -734,8 +723,7 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 {
 	TArray<NetworkPlayerInfo> tempPlayers = {};
 	tempPlayers.Reserve(numPlayers);
-	TArray<bool> assignedPlayers = {};
-	assignedPlayers.Reserve(MAXPLAYERS);
+	bool assignedPlayers[MAXPLAYERS] = {};
 
 	// Read all the save game players into a temporary array
 	for (auto& p : tempPlayers)
@@ -752,7 +740,7 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 	// based on their names. If two players in the savegame have the
 	// same name, then they are assigned to players in the current game
 	// on a first-come, first-served basis.
-	for (int i = 0; i < MAXPLAYERS; ++i)
+	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
 		if (!PlayerInGame(i))
 			continue;
@@ -781,7 +769,7 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 
 	// Any players that didn't have matching names are assigned to existing
 	// players on a first-come, first-served basis.
-	for (int i = 0; i < MAXPLAYERS; ++i)
+	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
 		if (!PlayerInGame(i) || assignedPlayers[i])
 			continue;
@@ -835,7 +823,7 @@ void FLevelLocals::CopyPlayer(player_t *dst, player_t *src, const char *name)
 	bool attackdown = dst->attackdown;
 	bool usedown = dst->usedown;
 
-	dst->CopyFrom(*src, true);	// To avoid memory leaks at this point the userinfo in src must be empty which is taken care of by the TransferFrom call above.
+	dst->CopyFrom(*src);	// To avoid memory leaks at this point the userinfo in src must be empty which is taken care of by the TransferFrom call above.
 
 	dst->cheats |= chasecam;
 
@@ -894,7 +882,7 @@ void FLevelLocals::SpawnExtraPlayers()
 {
 	// If there are more players now than there were in the savegame,
 	// be sure to spawn the extra players.
-	int i;
+	unsigned int i;
 
 	if (deathmatch || !isPrimaryLevel())
 	{
@@ -949,13 +937,11 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 	if (arc.isReading())
 	{
 		Thinkers.DestroyAllThinkers();
+		ClientSideThinkers.DestroyAllThinkers();
 		interpolator.ClearInterpolations();
 		arc.ReadObjects(hubload);
 		// If there have been object deserialization errors we must absolutely not continue here because scripted objects can do unpredictable things.
 		if (arc.mObjectErrors) I_Error("Failed to load savegame");
-	}
-	else {
-		arc("mapversion", mapVersion);
 	}
 
 	arc("multiplayer", multiplayer);
@@ -966,6 +952,8 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 		("fadeto", fadeto)
 		("skyspeed1", skyspeed1)
 		("skyspeed2", skyspeed2)
+		("skymistspeed", skymistspeed)
+		("skymistyscale", skymistyscale)
 		("found_secrets", found_secrets)
 		("found_items", found_items)
 		("killed_monsters", killed_monsters)
@@ -979,9 +967,12 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 		("totaltime", i)
 		("skytexture1", skytexture1)
 		("skytexture2", skytexture2)
+		("skymisttexture", skymisttexture)
 		("fogdensity", fogdensity)
 		("outsidefogdensity", outsidefogdensity)
 		("skyfog", skyfog)
+		("thickfogdistance", thickfogdistance)
+		("thickfogmultiplier", thickfogmultiplier)
 		("deathsequence", deathsequence)
 		("bodyqueslot", bodyqueslot)
 		("spawnindex", spawnindex)
@@ -993,7 +984,8 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 		("scrolls", Scrolls)
 		("automap", automap)
 		("interpolator", interpolator)
-		("frozenstate", frozenstate);
+		("frozenstate", frozenstate)
+		("actorbehaviors", ActorBehaviors);
 
 
 	// Hub transitions must keep the current total time
@@ -1044,7 +1036,7 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 		{
 			P_Recalculate3DFloors(&sec);
 		}
-		for (int i = 0; i < MAXPLAYERS; ++i)
+		for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 		{
 			if (PlayerInGame(i) && Players[i]->mo != nullptr)
 			{
@@ -1123,7 +1115,7 @@ void FLevelLocals::UnSnapshotLevel(bool hubLoad)
 			next = it.Next();
 			if (pawn->player == nullptr || pawn->player->mo == nullptr || !PlayerInGame(pawn->player))
 			{
-				int i;
+				unsigned int i;
 
 				// If this isn't the unmorphed original copy of a player, destroy it, because it's extra.
 				for (i = 0; i < MAXPLAYERS; ++i)
@@ -1149,4 +1141,3 @@ void FLevelLocals::UnSnapshotLevel(bool hubLoad)
 		Behaviors.UnlockLevelVarStrings(levelnum);
 	}
 }
-

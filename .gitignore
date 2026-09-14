@@ -1,12 +1,17 @@
 # build artifacts
-/build*
+/*build*
 /wadsrc/*.pk3
 .flatpak-builder/
 *.AppImage
 *.flatpak
 flatpak/
-gzdoom-crash.log
+uzdoom-crash.log
 fmodapi*linux/
+gitinfo.h
+wadsrc*/**/language.csv
+wadsrc*/**/language.0
+wadsrc/static/contributors.txt
+wadsrc/static/meta.xml
 
 # editor/tooling/os files
 *~
@@ -17,6 +22,7 @@ fmodapi*linux/
 .vscode
 .cache
 *.kate-swp
+.kate*
 *.geany
 
 # private dev files
@@ -31,31 +37,10 @@ fmodapi*linux/
 *.ilk
 *.aps
 /wadsrc_wad
-*.user
-/build
 /release_gcc
 /DOOMSTATS.TXT
-/src/gitinfo.h
-/wadsrc/*.pk3
 /disasm.txt
-/build_vc2015
-/build_vc2015-32
-/build_vc2015-64
-/build_vc2017-64
-/build
 /llvm
-.vs
-.idea
-.vscode
 /src/gl/unused
 /mapfiles_release/*.map
-/AppDir
-/appimage-build
-*.AppImage
-.DS_Store
-/build_vc2017-32
-/build2
-/build_vc2019-64
-/build_vc2019-32
-/build__
-gzdoom-crash.log
+.cache/

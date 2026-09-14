@@ -1,3 +1,19 @@
+/*
+** hw_viewpointuniforms.h
+**
+**
+**
+**---------------------------------------------------------------------------
+**
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
+**
+** SPDX-License-Identifier: GPL-3.0-or-later
+**
+**---------------------------------------------------------------------------
+**
+*/
+
 #pragma once
 
 #include "matrix.h"
@@ -30,11 +46,11 @@ struct HWViewpointUniforms
 
 	int mLightBlendMode = 0;
 
+	float mThickFogDistance = -1.f;
+	float mThickFogMultiplier = 30.f;
+
 	void CalcDependencies()
 	{
 		mNormalViewMatrix.computeNormalMatrix(mViewMatrix);
 	}
 };
-
-
-

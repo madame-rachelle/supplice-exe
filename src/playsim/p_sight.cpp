@@ -1,25 +1,23 @@
-//-----------------------------------------------------------------------------
-//
-// Copyright 1993-1994 id Software
-// Copyright 1994-1996 Raven Software
-// Copyright 1999-2016 Randy Heit
-// Copyright 2002-2016 Christoph Oelckers
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/
-//
-//-----------------------------------------------------------------------------
-//
+/*
+** p_sight.cpp
+**
+**
+**
+**---------------------------------------------------------------------------
+**
+** Copyright 1993-1994 id Software
+** Copyright 1994-1996 Raven Software
+** Copyright 1999-2016 Marisa Heit
+** Copyright 2002-2016 Christoph Oelckers
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
+**
+** SPDX-License-Identifier: GPL-3.0-or-later
+**
+**---------------------------------------------------------------------------
+**
+*/
+
 #include <assert.h>
 
 #include "doomdef.h"
@@ -300,7 +298,7 @@ bool SightCheck::PTR_SightTraverse (intercept_t *in)
 	if(li->frontsector->e->XFloor.ffloors.Size() || li->backsector->e->XFloor.ffloors.Size())
 	{
 		if (frontflag == -1) frontflag = P_PointOnLineSidePrecise(sightstart, li);
-		
+
 		//Check 3D FLOORS!
 		for(int i=1;i<=2;i++)
 		{
@@ -335,7 +333,7 @@ bool SightCheck::PTR_SightTraverse (intercept_t *in)
 				}
 				else
 				{
-					// the 3D-floor is inside the viewing cone but neither clips the top nor the bottom so by 
+					// the 3D-floor is inside the viewing cone but neither clips the top nor the bottom so by
 					// itself it can't be view blocking.
 					// However, if there's a 3D-floor on the other side that obstructs the same vertical range
 					// the 2 together will block sight.
@@ -651,7 +649,7 @@ bool SightCheck::P_SightPathTraverse ()
 		if (sightstart.Z < ff_top) checkceiling = false;
 		if (sightstart.Z >= ff_bottom) checkfloor = false;
 
-		if (sightstart.Z < ff_top && sightstart.Z >= ff_bottom) 
+		if (sightstart.Z < ff_top && sightstart.Z >= ff_bottom)
 		{
 			myseethrough = rover->flags & FF_SEETHROUGH;
 			break;

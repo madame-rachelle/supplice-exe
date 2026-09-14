@@ -1,35 +1,27 @@
 /*
+** events.cpp
+**
 **
 **
 **---------------------------------------------------------------------------
+**
+** Copyright 1998-2016 Marisa Heit
 ** Copyright 2017 ZZYZX
-** All rights reserved.
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
 **
-** Redistribution and use in source and binary forms, with or without
-** modification, are permitted provided that the following conditions
-** are met:
+** SPDX-License-Identifier: GPL-3.0-or-later
 **
-** 1. Redistributions of source code must retain the above copyright
-**    notice, this list of conditions and the following disclaimer.
-** 2. Redistributions in binary form must reproduce the above copyright
-**    notice, this list of conditions and the following disclaimer in the
-**    documentation and/or other materials provided with the distribution.
-** 3. The name of the author may not be used to endorse or promote products
-**    derived from this software without specific prior written permission.
+**---------------------------------------------------------------------------
 **
-** THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
-** IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-** OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-** IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
-** INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-** NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-** DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-** THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-** (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-** THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+** Code written prior to 2026 is also licensed under:
+**
+** SPDX-License-Identifier: BSD-3-Clause
+**
 **---------------------------------------------------------------------------
 **
 */
+
 #include "events.h"
 #include "vmintern.h"
 #include "r_utility.h"
@@ -123,7 +115,12 @@ void DNetworkBuffer::AddDouble(double msg)
 
 void DNetworkBuffer::AddString(const FString& msg)
 {
-	_size += msg.Len() + 1u;
+	if(msg.Len() >= UINT_MAX)
+	{
+		I_Error("network buffer string too large");
+	}
+
+	_size += ((unsigned int)msg.Len()) + 1u;
 	_buffer.Push({ NET_STRING, msg });
 }
 
@@ -280,7 +277,7 @@ bool EventManager::RegisterHandler(DStaticEventHandler* handler)
 
 	handler->OnRegister();
 	handler->owner = this;
-	
+
 	// link into normal list
 	// update: link at specific position based on order.
 	DStaticEventHandler* before = nullptr;
@@ -340,7 +337,7 @@ bool EventManager::RegisterHandler(DStaticEventHandler* handler)
 	return true;
 }
 
-bool EventManager::UnregisterHandler(DStaticEventHandler* handler)
+bool EventManager::UnregisterHandler(DStaticEventHandler *handler, bool destroying)
 {
 	if (handler == nullptr || handler->ObjectFlags & OF_EuthanizeMe)
 		return false;
@@ -373,7 +370,8 @@ bool EventManager::UnregisterHandler(DStaticEventHandler* handler)
 	if (handler->IsStatic())
 	{
 		handler->ObjectFlags &= ~OF_Transient;
-		handler->Destroy();
+		if (!destroying)
+			handler->Destroy();
 	}
 	return true;
 }
@@ -427,8 +425,14 @@ bool EventManager::SendNetworkCommand(const FName& cmd, VMVa_List& args)
 			{
 				++bytes; // Strings will always consume at least one byte.
 				const FString* str = ListGetString(args);
+
+				if(str->Len() >= UINT_MAX || (bytes + (unsigned int)str->Len()) >= UINT_MAX)
+				{
+					I_Error("network buffer string too large");
+				}
+
 				if (str != nullptr)
-					bytes += str->Len();
+					bytes += (unsigned int)str->Len();
 				break;
 			}
 		}
@@ -607,7 +611,7 @@ void EventManager::InitStaticHandlers(FLevelLocals *l, bool map)
 		InitHandler(type);
 	}
 
-	if (!map) 
+	if (!map)
 		return;
 
 	// initialize event handlers from mapinfo
@@ -672,16 +676,6 @@ void EventManager::WorldUnloaded(const FString& nextmap)
 	}
 }
 
-void EventManager::PreSave(int saveType) {
-	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		handler->PreSave(saveType);
-}
-
-void EventManager::PostSave(int saveType) {
-	for (DStaticEventHandler* handler = FirstEventHandler; handler; handler = handler->next)
-		handler->PostSave(saveType);
-}
-
 bool EventManager::ShouldCallStatic(bool forplay)
 {
 	return this != &staticEventManager && Level == primaryLevel;
@@ -725,7 +719,7 @@ bool EventManager::WorldHitscanPreFired(AActor* actor, DAngle angle, double dist
 		for (DStaticEventHandler* handler = FirstEventHandler; handler && ret == false; handler = handler->next)
 			ret = handler->WorldHitscanPreFired(actor, angle, distance, pitch, damage, damageType, pufftype, flags, sz, offsetforward, offsetside);
 	}
-	
+
 	return ret;
 }
 
@@ -1025,7 +1019,7 @@ bool EventManager::CheckUiProcessors()
 
 bool EventManager::CheckRequireMouse()
 {
-	if (ShouldCallStatic(false)) 
+	if (ShouldCallStatic(false))
 	{
 		if (staticEventManager.CheckRequireMouse()) return true;
 	}
@@ -2082,29 +2076,10 @@ void DStaticEventHandler::WorldTick()
 	}
 }
 
-void DStaticEventHandler::PreSave(int saveType) {
-	IFVIRTUAL(DStaticEventHandler, PreSave)
-	{
-		if (isEmpty(func)) return;
-		VMValue params[2] = { (DStaticEventHandler*)this, saveType };
-		VMCall(func, params, 2, nullptr, 0);
-	}
-}
-
-
-void DStaticEventHandler::PostSave(int saveType) {
-	IFVIRTUAL(DStaticEventHandler, PostSave)
-	{
-		if (isEmpty(func)) return;
-		VMValue params[2] = { (DStaticEventHandler*)this, saveType };
-		VMCall(func, params, 2, nullptr, 0);
-	}
-}
-
 FRenderEvent EventManager::SetupRenderEvent()
 {
 	FRenderEvent e;
-    auto &vp = r_viewpoint;
+	auto &vp = r_viewpoint;
 	e.ViewPos = vp.Pos;
 	e.ViewAngle = vp.Angles.Yaw;
 	e.ViewPitch = vp.Angles.Pitch;
@@ -2120,7 +2095,7 @@ void DStaticEventHandler::RenderFrame()
 	IFVIRTUAL(DStaticEventHandler, RenderFrame)
 	{
 		// don't create excessive DObjects if not going to be processed anyway
-	 	if (isEmpty(func)) return;
+		if (isEmpty(func)) return;
 		FRenderEvent e = owner->SetupRenderEvent;
 		VMValue params[2] = { (DStaticEventHandler*)this, &e };
 		VMCall(func, params, 2, nullptr, 0);
@@ -2415,7 +2390,7 @@ void DStaticEventHandler::NewGame()
 void DStaticEventHandler::OnDestroy()
 {
 	if (owner)
-		owner->UnregisterHandler(this);
+		owner->UnregisterHandler(this, true);
 	Super::OnDestroy();
 }
 

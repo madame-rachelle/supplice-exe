@@ -52,7 +52,6 @@ extern FFastTrig fasttrig;
 #define DEG2BAM(f) ((unsigned)RoundHalfEven((f) * (0x40000000/90.)))
 #define RAD2BAM(f) ((unsigned)RoundHalfEven((f) * (0x80000000/3.14159265358979323846)))
 
-
 inline double fastcosbam(unsigned int v)
 {
 	return fasttrig.cos(v);

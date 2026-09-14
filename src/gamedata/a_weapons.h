@@ -1,3 +1,27 @@
+/*
+** a_weapons.h
+**
+** Implements weapon handling
+**
+**---------------------------------------------------------------------------
+**
+** Copyright 2000-2016 Marisa Heit
+** Copyright 2006-2016 Christoph Oelckers
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
+**
+** SPDX-License-Identifier: GPL-3.0-or-later
+**
+**---------------------------------------------------------------------------
+**
+** Code written prior to 2026 is also licensed under:
+**
+** SPDX-License-Identifier: BSD-3-Clause
+**
+**---------------------------------------------------------------------------
+**
+*/
+
 #pragma once
 
 #include "a_pickups.h"
@@ -120,11 +144,11 @@ public:
 
 void P_PlaybackKeyConfWeapons(FWeaponSlots *slots);
 void Net_WriteWeapon(PClassActor *type);
-PClassActor *Net_ReadWeapon(uint8_t **stream);
+PClassActor *Net_ReadWeapon(TArrayView<uint8_t>& stream);
 
 void P_SetupWeapons_ntohton();
-void P_WriteDemoWeaponsChunk(uint8_t **demo);
-void P_ReadDemoWeaponsChunk(uint8_t **demo);
+void P_WriteDemoWeaponsChunk(TArrayView<uint8_t>& demo);
+void P_ReadDemoWeaponsChunk(TArrayView<uint8_t>& demo);
 
 
 enum class EBobStyle
@@ -159,5 +183,6 @@ enum
 	WIF_NODEATHINPUT =		0x00020000, // The weapon cannot be fired/reloaded/whatever when the player is dead
 	WIF_CHEATNOTWEAPON	=	0x00040000,	// Give cheat considers this not a weapon (used by Sigil)
 	WIF_NOAUTOSWITCHTO =	0x00080000, // cannot be switched to when autoswitching weapons.
+	WIF_BFG	=				0x00100000, // BFG tier weapon
+	WIF_EXPLOSIVE =			0x00200000, // Weapon is explosive
 };
-

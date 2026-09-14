@@ -1,24 +1,22 @@
-//-----------------------------------------------------------------------------
-//
-// Copyright 1993-1996 id Software
-// Copyright 1994-1996 Raven Software
-// Copyright 1999-2016 Randy Heit
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see http://www.gnu.org/licenses/
-//
-//-----------------------------------------------------------------------------
-//
+/*
+** ct_chat.cpp
+**
+**
+**
+**---------------------------------------------------------------------------
+**
+** Copyright 1993-1996 id Software
+** Copyright 1994-1996 Raven Software
+** Copyright 1999-2016 Marisa Heit
+** Copyright 2007-2016 Christoph Oelckers
+** Copyright 2017-2025 GZDoom Maintainers and Contributors
+** Copyright 2025-2026 UZDoom Maintainers and Contributors
+**
+** SPDX-License-Identifier: GPL-3.0-or-later
+**
+**---------------------------------------------------------------------------
+**
+*/
 
 
 #include <string.h>
@@ -45,6 +43,7 @@
 #include "c_buttons.h"
 #include "d_buttons.h"
 #include "v_draw.h"
+#include "r_utility.h"
 
 enum
 {
@@ -55,6 +54,7 @@ enum
 EXTERN_CVAR (Bool, sb_cooperative_enable)
 EXTERN_CVAR (Bool, sb_deathmatch_enable)
 EXTERN_CVAR (Bool, sb_teamdeathmatch_enable)
+EXTERN_CVAR (Int, cl_showchat)
 
 int active_con_scaletext();
 
@@ -73,8 +73,16 @@ static void CT_BackSpace ();
 static void ShoveChatStr (const char *str, uint8_t who);
 static bool DoSubstitution (FString &out, const char *in);
 
-static TArray<uint8_t> ChatQueue;
+constexpr int MessageLimit = 2; // Clamp the amount of messages you can send in a brief period
+constexpr uint64_t MessageThrottleTime = 1000u; // Time in ms that spam messages will be tracked.
+constexpr uint64_t SpamCoolDown = 3000u;
 
+static TArray<uint8_t> ChatQueue;
+static uint64_t ChatThrottle = 0u;
+static int ChatSpamCount = 0;
+static uint64_t ChatCoolDown = 0u;	// Spam limiter
+
+CVAR (Int, net_chatslowmode, 0, CVAR_SERVERINFO | CVAR_NOSAVE)
 CVAR (String, chatmacro1, "I'm ready to kick butt!", CVAR_ARCHIVE)
 CVAR (String, chatmacro2, "I'm OK.", CVAR_ARCHIVE)
 CVAR (String, chatmacro3, "I'm not looking too good!", CVAR_ARCHIVE)
@@ -186,7 +194,7 @@ bool CT_Responder (event_t *ev)
 			}
 			else
 			{
-				CT_AddChar (ev->data1);
+				CT_AddChar((uint16_t)ev->data1);
 			}
 			return true;
 		}
@@ -230,23 +238,25 @@ void CT_PasteChat(const char *clip)
 //
 //===========================================================================
 
+static int IsScoreboardOpen()
+{
+	return buttonMap.ButtonDown(Button_ShowScores) || bScoreboardToggled;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DBaseStatusBar, IsScoreboardOpen, IsScoreboardOpen)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_BOOL(IsScoreboardOpen());
+}
+
 void CT_Drawer (void)
 {
+	auto &vp = r_viewpoint;
 	auto drawer = twod;
 	FFont *displayfont = NewConsoleFont;
 
-	if (players[consoleplayer].camera != NULL &&
-		(buttonMap.ButtonDown(Button_ShowScores) ||
-		 players[consoleplayer].camera->health <= 0 ||
-		 SB_ForceActive))
-	{
-		bool skipit = false;
-		if (gamestate == GS_CUTSCENE)
-		{
-			// todo: check for summary screen
-		}
-		if (!skipit) HU_DrawScores (&players[consoleplayer]);
-	}
+	HU_DrawScores(vp.TicFrac);
+
 	if (chatmodeon)
 	{
 		// [MK] allow the status bar to take over chat prompt drawing
@@ -265,7 +275,7 @@ void CT_Drawer (void)
 			}
 		}
 
-		FStringf prompt("%s ", GStrings.GetString("TXT_SAY"));
+		FStringf prompt("%s ", chatmodeon == 2 && deathmatch && teamplay ? GStrings.GetString("TXT_SAYTEAM") : GStrings.GetString("TXT_SAY"));
 		int x, scalex, y, promptwidth;
 
 		y = (viewactive || gamestate != GS_LEVEL) ? -displayfont->GetHeight()-2 : -displayfont->GetHeight() - 22;
@@ -293,7 +303,7 @@ void CT_Drawer (void)
 		}
 		printstr += displayfont->GetCursor();
 
-		DrawText(drawer, displayfont, CR_GREEN, 0, y, prompt.GetChars(), 
+		DrawText(drawer, displayfont, CR_GREEN, 0, y, prompt.GetChars(),
 			DTA_VirtualWidth, screen_width, DTA_VirtualHeight, screen_height, DTA_KeepRatio, true, TAG_DONE);
 		DrawText(drawer, displayfont, CR_GREY, promptwidth, y, printstr.GetChars(),
 			DTA_VirtualWidth, screen_width, DTA_VirtualHeight, screen_height, DTA_KeepRatio, true, TAG_DONE);
@@ -364,6 +374,24 @@ static void ShoveChatStr (const char *str, uint8_t who)
 	// Don't send empty messages
 	if (str == NULL || str[0] == '\0')
 		return;
+
+	if (netgame)
+	{
+		const uint64_t time = I_msTime();
+		if (time >= ChatThrottle)
+		{
+			ChatSpamCount = 0;
+		}
+		else if (++ChatSpamCount >= MessageLimit)
+		{
+			ChatSpamCount = 0;
+			ChatCoolDown = time + SpamCoolDown;
+		}
+
+		ChatThrottle = time + MessageThrottleTime;
+		if (net_chatslowmode > 0)
+			ChatCoolDown = max<uint64_t>(time + net_chatslowmode * 1000, ChatCoolDown);
+	}
 
 	FString substBuff;
 
@@ -506,15 +534,47 @@ static bool DoSubstitution (FString &out, const char *in)
 	return true;
 }
 
+bool CanChat()
+{
+	return gamestate == GS_LEVEL && !demoplayback && menuactive == MENU_Off;
+}
+
 CCMD (messagemode)
 {
-	if (menuactive == MENU_Off)
+	if (!CanChat())
+		return;
+
+	const uint64_t time = I_msTime();
+	if (ChatCoolDown > time)
 	{
-		buttonMap.ResetButtonStates();
-		chatmodeon = 1;
-		C_HideConsole ();
-		CT_ClearChatMessage ();
+		Printf("You must wait %d more seconds before being able to chat again\n", int((ChatCoolDown - time) * 0.001));
+		return;
 	}
+
+	if (multiplayer && deathmatch)
+	{
+		if (cl_showchat < CHAT_GLOBAL)
+		{
+			Printf("Global chat is currently disabled\n");
+			return;
+		}
+
+		chatmodeon = 1;
+	}
+	else
+	{
+		if (cl_showchat < CHAT_TEAM_ONLY)
+		{
+			Printf("Team chat is currently disabled\n");
+			return;
+		}
+
+		chatmodeon = 2;
+	}
+
+	buttonMap.ResetButtonStates();
+	C_HideConsole ();
+	CT_ClearChatMessage ();
 }
 
 CCMD (say)
@@ -522,22 +582,81 @@ CCMD (say)
 	if (argv.argc() == 1)
 	{
 		Printf ("Usage: say <message>\n");
+		return;
+	}
+
+	if (!CanChat())
+	{
+		Printf("Game is not in a valid state to send messages.\n");
+		return;
+	}
+
+	const uint64_t time = I_msTime();
+	if (ChatCoolDown > time)
+	{
+		Printf("You must wait %d more seconds before being able to chat again\n", int((ChatCoolDown - time) * 0.001));
+		return;
+	}
+
+	// If not in a DM lobby, route it to team chat instead (helps improve chat
+	// filtering).
+	if (multiplayer && deathmatch)
+	{
+		if (cl_showchat < CHAT_GLOBAL)
+		{
+			Printf("Global chat is currently disabled\n");
+		}
+		else
+		{
+			ShoveChatStr(argv[1], 0);
+		}
+	}
+	else if (cl_showchat < CHAT_TEAM_ONLY)
+	{
+		Printf("Team chat is currently disabled\n");
 	}
 	else
 	{
-		ShoveChatStr (argv[1], 0);
+		ShoveChatStr(argv[1], 1);
 	}
 }
 
 CCMD (messagemode2)
 {
-	if (menuactive == MENU_Off)
+	if (!CanChat())
+		return;
+
+	const uint64_t time = I_msTime();
+	if (ChatCoolDown > time)
 	{
-		buttonMap.ResetButtonStates();
-		chatmodeon = 2;
-		C_HideConsole ();
-		CT_ClearChatMessage ();
+		Printf("You must wait %d more seconds before being able to chat again\n", int((ChatCoolDown - time) * 0.001));
+		return;
 	}
+
+	if (multiplayer && deathmatch && !teamplay)
+	{
+		if (cl_showchat < CHAT_GLOBAL)
+		{
+			Printf("Global chat is currently disabled\n");
+			return;
+		}
+
+		chatmodeon = 1;
+	}
+	else
+	{
+		if (cl_showchat < CHAT_TEAM_ONLY)
+		{
+			Printf("Team chat is currently disabled\n");
+			return;
+		}
+
+		chatmodeon = 2;
+	}
+
+	buttonMap.ResetButtonStates();
+	C_HideConsole();
+	CT_ClearChatMessage();
 }
 
 CCMD (say_team)
@@ -545,6 +664,38 @@ CCMD (say_team)
 	if (argv.argc() == 1)
 	{
 		Printf ("Usage: say_team <message>\n");
+		return;
+	}
+
+	if (!CanChat())
+	{
+		Printf("Game is not in a valid state to send messages.\n");
+		return;
+	}
+
+	const uint64_t time = I_msTime();
+	if (ChatCoolDown > time)
+	{
+		Printf("You must wait %d more seconds before being able to chat again\n", int((ChatCoolDown - time) * 0.001));
+		return;
+	}
+
+	// If in a DM lobby, route it to global chat instead (helps
+	// improve chat filtering).
+	if (multiplayer && deathmatch && !teamplay)
+	{
+		if (cl_showchat < CHAT_GLOBAL)
+		{
+			Printf("Global chat is currently disabled\n");
+		}
+		else
+		{
+			ShoveChatStr(argv[1], 0);
+		}
+	}
+	else if (cl_showchat < CHAT_TEAM_ONLY)
+	{
+		Printf("Team chat is currently disabled\n");
 	}
 	else
 	{
